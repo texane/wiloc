@@ -1,3 +1,9 @@
+[ on dns tunnelling ]
+in practice, active portals (FreeWifi) block DNS request if they
+do not target the DNS server IP passed during the DHCP response.
+So, it is not possible to escape without having first a DHCP
+session, which means a full UDP stack.
+
 [ userspace networking ]
 https://austinmarton.wordpress.com/2011/09/14/sending-raw-ethernet-packets-from-a-specific-interface-in-c-on-linux/
 https://austinmarton.wordpress.com/2012/06/03/receiving-raw-packets-in-linux-without-pcap/

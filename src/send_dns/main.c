@@ -16,25 +16,63 @@
 #include <netinet/ip.h>
 #include <netinet/udp.h>
 #include <netinet/ether.h>
-#include <../common/dns.h>
+#include "../common/dns.h"
 
 #if 0
+
 #define MY_DEST_MAC0	0x00
 #define MY_DEST_MAC1	0x00
 #define MY_DEST_MAC2	0x00
 #define MY_DEST_MAC3	0x00
 #define MY_DEST_MAC4	0x00
 #define MY_DEST_MAC5	0x00
-#else
+
+#elif 0
+
 #define MY_DEST_MAC0	0x00
 #define MY_DEST_MAC1	0x07
 #define MY_DEST_MAC2	0xcb
 #define MY_DEST_MAC3	0x9a
 #define MY_DEST_MAC4	0x5e
 #define MY_DEST_MAC5	0x17
+
+#elif 1
+
+/* SFR Fonera */
+/* nameserver 109.0.66.10 */
+/* nameserver 109.0.66.20 */
+
+#define MY_DEST_MAC0	0xc2
+#define MY_DEST_MAC1	0x95
+#define MY_DEST_MAC2	0x04
+#define MY_DEST_MAC3	0xe1
+#define MY_DEST_MAC4	0x7c
+#define MY_DEST_MAC5	0x85
+
+#define MY_DEST_IP	"109.0.66.10"
+
+#else
+
+/* FreeWifi */
+/* nameserver 212.27.40.241 */
+/* nameserver 212.27.40.240 */
+
+#define MY_DEST_MAC0	0x00
+#define MY_DEST_MAC1	0x24
+#define MY_DEST_MAC2	0xd4
+#define MY_DEST_MAC3	0xda
+#define MY_DEST_MAC4	0x20
+#define MY_DEST_MAC5	0x1d
+
+#define MY_DEST_IP	"212.27.40.241"
+
 #endif
 
+#if 0
 #define DEFAULT_IF	"eth0"
+#else
+#define DEFAULT_IF	"wlan0"
+#endif
 #define BUF_SIZ		1024
 
 unsigned short csum(unsigned short *buf, int nwords)
@@ -131,7 +169,7 @@ int main(int argc, char *argv[])
 
 	/* source IP */
 	memset(&if_ip, 0, sizeof(struct ifreq));
-	strncpy(if_ip.ifr_name, "eth0", IFNAMSIZ-1);
+	strncpy(if_ip.ifr_name, DEFAULT_IF, IFNAMSIZ-1);
 	if (ioctl(sockfd, SIOCGIFADDR, &if_ip) < 0)
 	  perror("SIOCGIFADDR");
 
@@ -166,7 +204,7 @@ int main(int argc, char *argv[])
 	/* iph->saddr = inet_addr("42.42.42.42"); */
 	/* iph->saddr = inet_addr("10.0.0.0"); */
 	/* Destination IP address */
-	iph->daddr = inet_addr("212.27.40.241");
+	iph->daddr = inet_addr(MY_DEST_IP);
 	tx_len += sizeof(struct iphdr);
 
 	/* UDP Header */
@@ -177,7 +215,7 @@ int main(int argc, char *argv[])
 
 	/* UDP payload */
 #if 1
-	tx_len += make_dns_query(sendbuf + tx_len, "a.a.txne.gdn");
+	tx_len += make_dns_query(sendbuf + tx_len, "fubar.a.txne.gdn");
 #else
 	sendbuf[tx_len++] = 'a';
 	sendbuf[tx_len++] = 'b';
