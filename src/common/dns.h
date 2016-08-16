@@ -1,5 +1,5 @@
-#ifndef COMMON_DNS_H_INCLUDED
-#define COMMON_DNS_H_INCLUDED
+#ifndef DNS_COMMON_H_INCLUDED
+#define DNS_COMMON_H_INCLUDED
 
 
 
@@ -16,7 +16,7 @@
 
 
 /* maximum size for DNS UDP based messages */
-#deine DNS_MSG_MAX_UDP_SIZE 512
+#define DNS_MSG_MAX_UDP_SIZE 512
 
 
 /* header format */
@@ -60,7 +60,7 @@ typedef struct
   uint8_t ancount: 2;
   uint8_t nscount: 2;
   uint8_t arcount: 2;
-} __attribute__((packed)) dns_hdr_t;
+} __attribute__((packed)) dns_header_t;
 
 
 /* question section format */
@@ -97,10 +97,6 @@ typedef struct
   uint8_t rdata[1];
 } __attribute__((packed)) dns_rr_common_t;
 
-typedef struct
-{
-} dns_rr_rdata_
-
 
 /* message format */
 
@@ -112,4 +108,4 @@ typedef struct
 } __attribute__((packed)) dns_msg_t;
 
 
-#endif /* COMMON_DNS_H_INCLUDED */
+#endif /* DNS_COMMON_H_INCLUDED */
