@@ -10,6 +10,7 @@ STRIP := $(CROSS_COMPILE)strip
 
 ifeq ($(TARGET), linux)
  CFLAGS += -DTARGET_LINUX
+ LFLAGS += -liw
 else
  $(error 'unsupported target')
 endif
