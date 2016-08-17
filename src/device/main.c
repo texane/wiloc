@@ -198,6 +198,10 @@ static int wifi_assoc_ap(wifi_handle_t* wi, const wifi_ap_t* ap)
 
 int main(int ac, char** av)
 {
+  /* TODO: avoid having to dhcp to save time */
+  /* is an IP truly required ? the goal is to send the */
+  /* DNS query. otherwise a full UDP stack is needed */
+
   /* TODO: select AP with best RSSI */
 
   static const char* const ifname = "wlan0";
