@@ -11,7 +11,8 @@
 /* names are 0 terminated strings */
 
 
-/* server listening port */
+/* server listening address and port */
+#define DNS_SERVER_ADDR "10.0.0.1"
 #define DNS_SERVER_PORT 53
 
 
