@@ -22,6 +22,8 @@
 
 /* header format */
 /* www.tcpipguide.com/free/t_DNSMessageHeaderandQuestionSectionFormat.htm */
+/* http://www.zytrax.com/books/dns/ch15/ */
+
 /* qr set to 0 when query is generated */
 /* aa set to 1 when authoritative answer */
 /* tc set when message truncated. refer to DNS_UDP_MAX_SIZE. */
@@ -37,6 +39,7 @@
 typedef struct
 {
   uint16_t id: 16;
+#if 0
   uint8_t qr: 1;
 #define DNS_OPCODE_QUERY 0
   uint8_t opcode: 4;
@@ -57,21 +60,25 @@ typedef struct
 #define DNS_RCODE_NOT_AUTH 9
 #define DNS_RCODE_NOT_ZONE 10
   uint8_t rcode: 4;
-  uint8_t qdcount: 2;
-  uint8_t ancount: 2;
-  uint8_t nscount: 2;
-  uint8_t arcount: 2;
+#else
+#define DNS_HDR_FLAG_RD (1 << 8)
+  uint16_t flags: 16;
+#endif
+  uint16_t qdcount: 16;
+  uint16_t ancount: 16;
+  uint16_t nscount: 16;
+  uint16_t arcount: 16;
 } __attribute__((packed)) dns_header_t;
 
 
 /* question section format */
 /* www.tcpipguide.com/free/t_DNSMessageHeaderandQuestionSectionFormat-2.htm */
-/* qclass: one in DNS_RR_TYPE_xxx */
+/* qtype: one in DNS_RR_TYPE_xxx */
+/* qclass: one in DNS_RR_CLASS_xxx */
 
 typedef struct
 {
   /* uint8_t qname[]; variable length */
-#define DNS_QTYPE_ALL 255
   uint16_t qtype: 16;
   uint16_t qclass: 16;
 } __attribute__((packed)) dns_query_t;
@@ -87,6 +94,8 @@ typedef struct
 #define DNS_RR_TYPE_PTR 12
 #define DNS_RR_TYPE_MX 15
 #define DNS_RR_TYPE_TXT 16
+
+#define DNS_RR_CLASS_IN 1
 
 typedef struct
 {
