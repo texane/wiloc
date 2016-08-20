@@ -1,0 +1,20 @@
+{
+ "wifiAccessPoints": [
+  { "macAddress": "00:37:B7:4D:17:BF" },
+  { "macAddress": "00:24:D4:DA:20:1D" },
+  { "macAddress": "00:24:D4:DA:20:1C" },
+  { "macAddress": "C8:D3:A3:6D:78:E1" },
+  { "macAddress": "14:0C:76:A5:17:23" },
+  { "macAddress": "14:0C:76:A5:17:24" },
+  { "macAddress": "14:0C:76:A5:17:25" },
+  { "macAddress": "E0:CE:C3:CB:18:CD" },
+  { "macAddress": "14:0C:76:D4:A6:E4" },
+  { "macAddress": "00:24:D4:DA:20:1E" },
+  { "macAddress": "1A:62:2C:7B:58:E4" },
+  { "macAddress": "00:24:D4:68:8E:0D" },
+  { "macAddress": "F4:CA:E5:99:43:61" },
+  { "macAddress": "14:0C:76:96:52:DE" },
+  { "macAddress": "24:95:04:E1:7C:84" },
+  { "macAddress": "C2:95:04:E1:7C:85" }
+ ]
+}

@@ -1,0 +1,8 @@
+{
+ "wifiAccessPoints": [
+  { "macAddress": "14:0c:76:71:dd:c9" },
+  { "macAddress": "14:0c:76:89:f0:9d" },
+  { "macAddress": "90:72:40:13:26:84" },
+  { "macAddress": "14:0c:76:71:dd:c7" }
+ ]
+}
