@@ -134,6 +134,7 @@ typedef struct
 #define WIFI_MACADDR_SIZE 6
   uint8_t macaddr[WIFI_MACADDR_SIZE];
   unsigned int rssi;
+  unsigned int is_open;
 } wifi_ap_t;
 
 
@@ -145,7 +146,10 @@ typedef struct
 #include <string.h>
 #include <sys/types.h>
 #include <net/ethernet.h>
+#include <arpa/inet.h>
 #include <iwlib.h>
+#include <arpa/nameser.h>
+#include <resolv.h>
 
 
 #define CONFIG_DEBUG 1
@@ -168,6 +172,7 @@ typedef struct
 {
   int sock;
   const char* ifname;
+  struct sockaddr_in nsaddr;
 } wifi_handle_t;
 
 
@@ -175,16 +180,43 @@ static int wifi_open(wifi_handle_t* wi, const char* ifname)
 {
   /* note: ifname must longlive until wifi_close */
 
+  struct ifreq ifr;
+
   wi->sock = iw_sockets_open();
   if (wi->sock < 0)
   {
     PERROR();
-    return -1;
+    goto on_error_0;
   }
 
   wi->ifname = ifname;
 
+  /* bring interface up */
+
+  memset(&ifr, 0, sizeof(ifr));
+  strncpy(ifr.ifr_name, wi->ifname, IFNAMSIZ);
+  if (ioctl(wi->sock, SIOCGIFFLAGS, &ifr))
+  {
+    PERROR();
+    goto on_error_1;
+  }
+
+  if ((ifr.ifr_flags & IFF_UP) == 0)
+  {
+    ifr.ifr_flags |= IFF_UP;
+    if (ioctl(wi->sock, SIOCSIFFLAGS, &ifr))
+    {
+      PERROR();
+      goto on_error_1;
+    }
+  }
+
   return 0;
+
+ on_error_1:
+  iw_sockets_close(wi->sock);
+ on_error_0:
+  return -1;
 }
 
 
@@ -194,7 +226,8 @@ static void wifi_close(wifi_handle_t* wi)
 }
 
 
-static int wifi_get_open_aps(wifi_handle_t* wi, wifi_ap_t* aps, size_t* n)
+static int wifi_get_aps
+(wifi_handle_t* wi, wifi_ap_t* aps, size_t* n, size_t* open_index)
 {
   size_t i;
   int err;
@@ -223,16 +256,22 @@ static int wifi_get_open_aps(wifi_handle_t* wi, wifi_ap_t* aps, size_t* n)
 
   err = 0;
   i = 0;
+  *open_index = (size_t)-1;
   for (pos = head.result; (i != *n) && (pos != NULL); pos = next)
   {
     wifi_ap_t* const ap = &aps[i];
-    unsigned int has_key;
 
-    has_key = 1;
-    if (pos->b.has_key == 0) has_key = 0;
-    else if (pos->b.key_flags & IW_ENCODE_DISABLED) has_key = 0;
-    else if (pos->b.key_flags & IW_ENCODE_OPEN) has_key = 0;
-    if (has_key) goto skip_ap;
+    ap->is_open = 0;
+    if (pos->b.has_key == 0) ap->is_open = 1;
+    else if (pos->b.key_flags & IW_ENCODE_DISABLED) ap->is_open = 1;
+    else if (pos->b.key_flags & IW_ENCODE_OPEN) ap->is_open = 1;
+
+    /* find at least one unencrypted ap */
+    if (*open_index == (size_t)-1)
+    {
+      if (ap->is_open) *open_index = i;
+      else if (i == (*n - 1)) goto skip_ap;
+    }
 
     if (pos->b.has_essid)
     {
@@ -312,30 +351,143 @@ static int wifi_assoc_ap(wifi_handle_t* wi, const wifi_ap_t* ap)
   return err;
 }
 
-__attribute__((unused))
+
+static int wifi_do_dhclient(wifi_handle_t* wi)
+{
+  char cmd[128];
+  int err = -1;
+  size_t i;
+  struct __res_state state;
+
+  snprintf(cmd, sizeof(cmd), "dhclient %s", wi->ifname);
+  if (system(cmd)) goto on_error_0;
+
+  /* retrieve nsaddr from resolver */
+
+  memset(&wi->nsaddr, 0, sizeof(wi->nsaddr));
+
+  if (res_ninit(&state)) goto on_error_0;
+  if (state.nscount <= 0) goto on_error_1;
+
+  for (i = 0; i != state.nscount; ++i)
+  {
+    if (state.nsaddr_list[i].sin_family == AF_INET) break ;
+  }
+
+  if (i == (size_t)state.nscount) goto on_error_1;
+
+  memcpy(&wi->nsaddr, &state.nsaddr_list[i], sizeof(wi->nsaddr));
+
+  err = 0;
+
+ on_error_1:
+  res_nclose(&state);
+ on_error_0:
+  return err;
+}
+
+
+static int udp_send
+(
+ const char* addr, uint16_t port,
+ const uint8_t* buf, size_t size
+)
+{
+  int err = -1;
+  int sock;
+  size_t nsent;
+  struct sockaddr sa;
+
+  sock = socket(AF_INET, SOCK_DGRAM, 0);
+  if (sock == -1) goto on_error_0;
+
+  memset(&sa, 0, sizeof(sa));
+  ((struct sockaddr_in*)&sa)->sin_family = AF_INET;
+  ((struct sockaddr_in*)&sa)->sin_port = htons(port);
+  ((struct sockaddr_in*)&sa)->sin_addr.s_addr = inet_addr(addr);
+
+  nsent = (size_t)sendto
+    (sock, buf, size, 0, (const struct sockaddr*)&sa, sizeof(sa));
+  if (nsent != size) goto on_error_1;
+
+  err = 0;
+ on_error_1:
+  close(sock);
+ on_error_0:
+  return err;
+}
+
+
+static int send_macs
+(
+ const uint8_t* macs, small_size_t nmac,
+ const char* daddr, uint16_t dport
+)
+{
+  uint8_t buf[SMALL_SIZE_MAX];
+  dns_header_t* dnsh;
+  dns_query_t* dnsq;
+  wiloc_msg_t* wilm;
+  small_size_t size;
+  small_size_t i;
+
+  dnsh = (dns_header_t*)buf;
+  dnsh->id = htons(0xdead);
+  dnsh->flags = htons(DNS_HDR_FLAG_RD);
+  dnsh->qdcount = htons(1);
+  dnsh->ancount = htons(0);
+  dnsh->nscount = htons(0);
+  dnsh->arcount = htons(0);
+
+  wilm = (wiloc_msg_t*)(buf + sizeof(dns_header_t));
+  wilm->vers = WILOC_MSG_VERS;
+  wilm->flags = WILOC_MSG_FLAG_WIFI | WILOC_MSG_FLAG_TICK;
+  wilm->did = 0x2a;
+  wilm->count = (uint8_t)nmac;
+
+  for (i = 0; i != (wilm->count * 6); ++i)
+  {
+    ((uint8_t*)wilm)[SMALL_SIZEOF(wiloc_msg_t) + i] = macs[i];
+  }
+
+  size = encode_wiloc_msg
+    ((uint8_t*)wilm, SMALL_SIZEOF(wiloc_msg_t) + wilm->count * 6);
+
+  dnsq = (dns_query_t*)(buf + sizeof(dns_header_t) + size);
+  dnsq->qtype = htons(DNS_RR_TYPE_A);
+  dnsq->qclass = htons(DNS_RR_CLASS_IN);
+
+  size += sizeof(dns_header_t) + sizeof(dns_query_t);
+  if (udp_send(daddr, dport, buf, size)) return -1;
+
+  return 0;
+}
+
+
 static int wifi_main(int ac, char** av)
 {
-  /* TODO: avoid having to dhcp to save time */
-  /* is an IP truly required ? the goal is to send the */
-  /* DNS query. otherwise a full UDP stack is needed */
-
-  /* TODO: select AP with best RSSI */
-
   static const char* const ifname = "wlan0";
   wifi_handle_t wi;
   wifi_ap_t aps[16];
+  uint8_t macs[16 * 6];
   size_t nap;
   size_t i;
   size_t j;
+  size_t open_index;
+  const char* nsaddr;
+  uint16_t nsport;
+  int err = -1;
 
   if (wifi_open(&wi, ifname)) goto on_error_0;
 
   nap = sizeof(aps) / sizeof(aps[0]);
-  if (wifi_get_open_aps(&wi, aps, &nap)) goto on_error_1;
+  if (wifi_get_aps(&wi, aps, &nap, &open_index)) goto on_error_1;
 
   for (i = 0; i != nap; ++i)
   {
     const wifi_ap_t* const ap = &aps[i];
+
+    memcpy(macs + i * 6, ap->macaddr, 6);
 
     for (j = 0; j != WIFI_MACADDR_SIZE; ++j)
     {
@@ -343,15 +495,29 @@ static int wifi_main(int ac, char** av)
       printf("%02x", ap->macaddr[j]);
     }
 
-    printf(" %s\n", ap->essid);
+    printf(" %s", ap->essid);
+    if (i == open_index) printf(" (*)");
+    else if (ap->is_open) printf(" (x)");
+    printf("\n");
   }
 
-  if (wifi_assoc_ap(&wi, &aps[3])) goto on_error_1;
+  if (open_index == (size_t)-1) goto on_error_1;
+
+  if (wifi_assoc_ap(&wi, &aps[open_index])) goto on_error_1;
+
+  if (wifi_do_dhclient(&wi)) goto on_error_1;
+
+  nsaddr = (const char*)inet_ntoa(wi.nsaddr.sin_addr);
+  nsport = ntohs(wi.nsaddr.sin_port);
+
+  if (send_macs(macs, (small_size_t)nap, nsaddr, nsport)) goto on_error_1;
+
+  err = 0;
 
  on_error_1:
   wifi_close(&wi);
  on_error_0:
-  return 0;
+  return err;
 }
 
 
@@ -359,6 +525,8 @@ static int wifi_main(int ac, char** av)
 
 
 #ifdef TARGET_LINUX
+
+#if 0
 
 #include <stdio.h>
 #include <stdint.h>
@@ -487,5 +655,14 @@ int main(int ac, char** av)
 
   return 0;
 }
+
+#else
+
+int main(int ac, char** av)
+{
+  return wifi_main(ac, av);
+}
+
+#endif
 
 #endif /* TARGET_LINUX */
