@@ -314,6 +314,7 @@ int main(int ac, char** av)
 	printf("\n");
       }
       printf("\n");
+      fflush(stdout);
 
       if (wilm->flags & WILOC_MSG_FLAG_TICK) ++tick;
 
