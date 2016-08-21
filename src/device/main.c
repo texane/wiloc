@@ -399,6 +399,45 @@ static int udp_send
   return err;
 }
 
+
+/* command line */
+
+typedef struct
+{
+  const char* daddr;
+  uint16_t dport;
+} cmd_info_t;
+
+static int get_cmd_info(cmd_info_t* ci, size_t ac, const char** av)
+{
+  size_t i;
+
+  if (ac & 1) return -1;
+
+  ci->daddr = "127.0.0.1";
+  ci->dport = DNS_SERVER_PORT;
+
+  for (i = 0; i != ac; i += 2)
+  {
+    const char* const k = av[i + 0];
+    const char* const v = av[i + 1];
+
+    if (strcmp(k, "-daddr") == 0)
+    {
+      ci->daddr = v;
+    }
+    else if (strcmp(k, "-dport") == 0)
+    {
+      ci->dport = (uint16_t)strtoul(v, NULL, 10);
+    }
+  }
+
+  return 0;
+}
+
+
+/* main */
+
 int main(int ac, char** av)
 {
   uint8_t buf[SMALL_SIZE_MAX];
@@ -408,6 +447,13 @@ int main(int ac, char** av)
   uint8_t* macs;
   small_size_t size;
   small_size_t i;
+  cmd_info_t ci;
+
+  if (get_cmd_info(&ci, (size_t)ac - 1, (const char**)av + 1))
+  {
+    printf("error @%u\n", __LINE__);
+    return -1;
+  }
 
   dnsh = (dns_header_t*)buf;
   dnsh->id = htons(0xdead);
@@ -433,9 +479,9 @@ int main(int ac, char** av)
   dnsq->qclass = htons(DNS_RR_CLASS_IN);
 
   size += sizeof(dns_header_t) + sizeof(dns_query_t);
-  if (udp_send("212.27.40.240", DNS_SERVER_PORT, buf, size))
+  if (udp_send(ci.daddr, ci.dport, buf, size))
   {
-    printf("error %u\n", __LINE__);
+    printf("error @%u\n", __LINE__);
     return -1;
   }
 
