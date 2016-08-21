@@ -11,13 +11,8 @@
 /* names are 0 terminated strings */
 
 
-/* server listening address and port */
-#define DNS_SERVER_ADDR "10.0.0.1"
+/* server listening port */
 #define DNS_SERVER_PORT 53
-
-/* zone */
-#define DNS_ZONE_NAME ".a.txne.gdn"
-
 
 /* maximum size for DNS UDP based messages */
 #define DNS_MSG_MAX_UDP_SIZE 512

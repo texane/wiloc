@@ -15,6 +15,8 @@ else
  $(error 'unsupported target')
 endif
 
+CFLAGS += -DDNS_ZONE_NAME='".a.txne.gdn"'
+
 O_FILES := $(C_FILES:.c=.o)
 
 .PHONY: all clean unit

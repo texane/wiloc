@@ -1,5 +1,121 @@
 #include <stdint.h>
 #include "../common/dns.h"
+#include "../common/wiloc.h"
+
+
+
+/* wiloc message encoder */
+/* implemented with 8 bits memory limited MCUs in mind */
+
+typedef uint8_t small_size_t;
+#define SMALL_SIZE_MAX ((uint8_t)-1)
+#define SMALL_SIZEOF(__x) ((small_size_t)sizeof(__x))
+
+
+static small_size_t encode_base64
+(
+ const uint8_t* sbuf, small_size_t slen,
+ uint8_t* dbuf, small_size_t dlen
+)
+{
+  static const uint8_t map[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "abcdefghijklmnopqrstuvwxyz"
+    "0123456789+/";
+
+  small_size_t i;
+  small_size_t x;
+
+  if ((((slen + 2) / 3) * 4) > dlen) return 0;
+
+  /* increment 3 chars at a time */
+  for (i = 0, x = 0; x < slen; x += 3) 
+  {
+    /* turn these three chars into a 24 bits number */
+    uint32_t n = ((uint32_t)sbuf[x]) << 16;
+      
+    if ((x + 1) < slen) n += ((uint32_t)sbuf[x + 1]) << 8;
+    if ((x + 2) < slen) n += (uint32_t)sbuf[x + 2];
+
+    /* split 24 bits into 4x 6 bits numbers */
+            
+    /* if 1 byte avail, its encoding is spread over 2 chars */
+    dbuf[i++] = map[(uint8_t)(n >> 18) & 63];
+    dbuf[i++] = map[(uint8_t)(n >> 12) & 63];
+
+    /* if 2 bytes avail, encoding is spread over 3 chars */
+    if ((x + 1) < slen) dbuf[i++] = map[(uint8_t)(n >> 6) & 63];
+
+    /* if 3 bytes avail, encoding is spread over 4 chars */
+    if ((x + 2) < slen) dbuf[i++] = map[(uint8_t)n & 63];
+  }  
+
+  /* pad if not a multiple of 3 */
+  x = slen % 3;
+  if (x)
+  {
+    for (; x != 3; ++x) dbuf[i++] = '=';
+  }
+
+  return i;
+}
+
+static small_size_t encode_wiloc_msg
+(uint8_t* mbuf, small_size_t msize)
+{
+  /* encode a wiloc request */
+  /* return the request size, including terminating 0 */
+
+  /* encoding process */
+  /* encode in base64 */
+  /* add label dots */
+  /* append zone */
+  /* encode_name */
+
+  static uint8_t tmp[SMALL_SIZE_MAX];
+  small_size_t i;
+  small_size_t j;
+  small_size_t k;
+
+  /* base64 encoding */
+
+  j = encode_base64(mbuf, msize, tmp, SMALL_SIZEOF(tmp));
+
+  /* add dots every 63 bytes chars */
+  /* put a dot even at 0 for dns_name_encode to work in place */
+
+  for (i = 0, k = 0; i != j; ++i, ++k)
+  {
+    if ((i % 63) == 0) mbuf[k++] = '.';
+    mbuf[k] = tmp[i];
+  }
+
+  /* append zone */
+
+  for (i = 0; DNS_ZONE_NAME[i]; ++i, ++k) mbuf[k] = DNS_ZONE_NAME[i];
+  mbuf[k++] = 0;
+
+  /* encode DNS name in place */
+
+  mbuf[0] = 0;
+
+  for (i = 1, j = 0; mbuf[i]; ++i)
+  {
+    if (mbuf[i] == '.')
+    {
+      j = i;
+      mbuf[i] = 0;
+    }
+    else
+    {
+      ++mbuf[j];
+    }
+  }
+
+  mbuf[i++] = 0;
+
+  return i;
+}
 
 
 /* wifi api */
@@ -15,9 +131,7 @@ typedef struct
 } wifi_ap_t;
 
 
-
 #ifdef TARGET_LINUX
-
 
 /* https://wireless.wiki.kernel.org/en/users/documentation/iw */
 /* TODO: remove iwlib dep */
@@ -192,11 +306,8 @@ static int wifi_assoc_ap(wifi_handle_t* wi, const wifi_ap_t* ap)
   return err;
 }
 
-
-#endif /* TARGET_LINUX */
-
-
-int main(int ac, char** av)
+__attribute__((unused))
+static int wifi_main(int ac, char** av)
 {
   /* TODO: avoid having to dhcp to save time */
   /* is an IP truly required ? the goal is to send the */
@@ -210,7 +321,6 @@ int main(int ac, char** av)
   size_t nap;
   size_t i;
   size_t j;
-  size_t k;
 
   if (wifi_open(&wi, ifname)) goto on_error_0;
 
@@ -237,3 +347,95 @@ int main(int ac, char** av)
  on_error_0:
   return 0;
 }
+
+
+#endif /* TARGET_LINUX */
+
+
+#ifdef TARGET_LINUX
+
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include "../common/dns.h"
+
+static int udp_send
+(
+ const char* addr, uint16_t port,
+ const uint8_t* buf, size_t size
+)
+{
+  int err = -1;
+  int sock;
+  size_t nsent;
+  struct sockaddr sa;
+
+  sock = socket(AF_INET, SOCK_DGRAM, 0);
+  if (sock == -1) goto on_error_0;
+
+  memset(&sa, 0, sizeof(sa));
+  ((struct sockaddr_in*)&sa)->sin_family = AF_INET;
+  ((struct sockaddr_in*)&sa)->sin_port = htons(port);
+  ((struct sockaddr_in*)&sa)->sin_addr.s_addr = inet_addr(addr);
+
+  printf("OK\n");
+
+  nsent = (size_t)sendto
+    (sock, buf, size, 0, (const struct sockaddr*)&sa, sizeof(sa));
+  if (nsent != size) goto on_error_1;
+
+  err = 0;
+ on_error_1:
+  close(sock);
+ on_error_0:
+  return err;
+}
+
+int main(int ac, char** av)
+{
+  uint8_t buf[SMALL_SIZE_MAX];
+  dns_header_t* dnsh;
+  dns_query_t* dnsq;
+  wiloc_msg_t* wilm;
+  uint8_t* macs;
+  small_size_t size;
+  small_size_t i;
+
+  dnsh = (dns_header_t*)buf;
+  dnsh->id = htons(0xdead);
+  dnsh->flags = htons(DNS_HDR_FLAG_RD);
+  dnsh->qdcount = htons(1);
+  dnsh->ancount = htons(0);
+  dnsh->nscount = htons(0);
+  dnsh->arcount = htons(0);
+
+  wilm = (wiloc_msg_t*)(buf + sizeof(dns_header_t));
+  wilm->vers = WILOC_MSG_VERS;
+  wilm->flags = WILOC_MSG_FLAG_WIFI | WILOC_MSG_FLAG_TICK;
+  wilm->did = 0x2a;
+  wilm->count = 16;
+
+  macs = (uint8_t*)wilm + sizeof(wiloc_msg_t);
+  for (i = 0; i != (wilm->count * 6); ++i) macs[i] = i;
+  size = encode_wiloc_msg
+    ((uint8_t*)wilm, SMALL_SIZEOF(wiloc_msg_t) + wilm->count * 6);
+
+  dnsq = (dns_query_t*)(buf + sizeof(dns_header_t) + size);
+  dnsq->qtype = htons(DNS_RR_TYPE_A);
+  dnsq->qclass = htons(DNS_RR_CLASS_IN);
+
+  size += sizeof(dns_header_t) + sizeof(dns_query_t);
+  if (udp_send("212.27.40.240", DNS_SERVER_PORT, buf, size))
+  {
+    printf("error %u\n", __LINE__);
+    return -1;
+  }
+
+  return 0;
+}
+
+#endif /* TARGET_LINUX */

