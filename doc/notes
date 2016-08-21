@@ -23,3 +23,8 @@ https://www.mylnikov.org/archives/1170
 https://wigle.net/
 https://github.com/nfvs/wigle-api
 https://code.activestate.com/recipes/578637-wigle-wifi-geolocation/
+
+[ mapping ]
+gpx file format, https://en.wikipedia.org/wiki/GPS_Exchange_Format
+kml file format, gpx equivalent for google earth
+http://www.gpsvisualizer.com/
