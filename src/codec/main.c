@@ -59,8 +59,10 @@ static small_size_t encode_base64
 
 static small_size_t encode_wiloc_req(uint8_t* rbuf, small_size_t rsize)
 {
+  /* encode a wiloc request */
+  /* return the request size, including terminating 0 */
+
   /* encoding process */
-  /* fill wiloc_query */
   /* encode in base64 */
   /* add label dots */
   /* append zone */
@@ -117,7 +119,6 @@ static small_size_t encode_wiloc_req(uint8_t* rbuf, small_size_t rsize)
 
 /* server side */
 
-#include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
 
@@ -187,43 +188,30 @@ static int decode_base64
   return 0;
 }
 
-static int decode_wiloc_req
-(
- const uint8_t* rbuf, size_t rsize,
- uint8_t* macs, size_t* nmac
-)
+static int decode_wiloc_req(uint8_t* rbuf, size_t rsize)
 {
+  /* decode a wiloc request */
+  /* return 0 on success */
+
   /* decoding process */
   /* decode name */
-  /* strip zone */
+  /* strip zone (not needed, base64 knows where to stop) */
   /* remove label dots */
   /* decode base64 */
-  /* interpret wiloc request */
 
-  static const small_size_t mac_size = 6;
-  const wiloc_req_t* req;
-  uint8_t tmp[256];
   size_t i;
   size_t j;
   size_t k;
-
-  if (rsize <= sizeof(DNS_ZONE_NAME)) return -1;
-  rsize -= sizeof(DNS_ZONE_NAME);
 
   i = 0;
   k = 0;
   for (j = 0; j != rsize; ++j)
   {
     if (j == k) k += (size_t)rbuf[j] + 1;
-    else tmp[i++] = rbuf[j];
+    else rbuf[i++] = rbuf[j];
   }
-  tmp[i] = 0;
 
-  decode_base64(tmp, i, &j);
-
-  req = (const wiloc_req_t*)tmp;
-  *nmac = (size_t)req->count;
-  memcpy(macs, tmp + sizeof(wiloc_req_t), *nmac * mac_size);
+  decode_base64(rbuf, i, &j);
 
   return 0;
 }
@@ -239,13 +227,11 @@ int main(int ac, char** av)
   static const small_size_t maclen = 6;
   uint8_t* macs;
   wiloc_req_t* req;
-
   uint8_t rbuf[SMALL_SIZE_MAX];
-  small_size_t qlen;
+  small_size_t rlen;
   small_size_t i;
-  size_t n;
 
-  /* make request */
+  /* make and encode request */
 
   req = (wiloc_req_t*)rbuf;
   req->vers = WILOC_REQ_VERS;
@@ -254,26 +240,46 @@ int main(int ac, char** av)
   req->count = nmac;
   macs = rbuf + sizeof(wiloc_req_t);
   for (i = 0; i != (nmac * maclen); ++i) macs[i] = i;
-
-  qlen = encode_wiloc_req(rbuf, SMALL_SIZEOF(rbuf));
-  printf("qlen: %u\n", qlen);
-
-  decode_wiloc_req(rbuf, sizeof(rbuf), macs, &n);
-
-  if (n != nmac)
+  rlen = encode_wiloc_req(rbuf, SMALL_SIZEOF(rbuf));
+  if (rlen == 0)
   {
-    printf("error\n");
+    printf("error %u\n", __LINE__);
     goto on_error;
   }
 
+  /* decode check request */
+
+  if (decode_wiloc_req(rbuf, rlen))
+  {
+    printf("error %u\n", __LINE__);
+    goto on_error;
+  }
+
+  req = (wiloc_req_t*)rbuf;
+
+  if (req->vers != WILOC_REQ_VERS)
+  {
+    printf("error %u\n", __LINE__);
+    goto on_error;
+  }
+
+  if (req->count != nmac)
+  {
+    printf("error %u\n", __LINE__);
+    goto on_error;
+  }
+
+  macs = rbuf + sizeof(wiloc_req_t);
   for (i = 0; i != (nmac * maclen); ++i)
   {
     if (macs[i] != i)
     {
-      printf("error\n");
+      printf("error %u\n", __LINE__);
       goto on_error;
     }
   }
+
+  printf("success\n");
 
  on_error:
   return 0;
