@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include "../common/dns.h"
@@ -296,10 +297,13 @@ int main(int ac, char** av)
       const uint8_t* const mac = (uint8_t*)wilm + sizeof(wiloc_msg_t);
       size_t i;
       size_t j;
+      struct timeval tm;
 
       err = decode_wiloc_msg((uint8_t*)wilm, serv.off);
       if (err) goto on_error_1;
 
+      gettimeofday(&tm, NULL);
+      printf("time: %lu\n", tm.tv_sec);
       printf("tick: %zu\n", tick);
       printf("did : 0x%02x\n", wilm->did);
       printf("macs:\n");
