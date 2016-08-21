@@ -130,6 +130,142 @@ static size_t make_dns_query(uint8_t* buf, const char* name)
   return sizeof(dns_header_t) + qname_pos + sizeof(dns_query_t);
 }
 
+
+#include "../common/wiloc.h"
+
+
+static int base64_encode
+(const void* data_buf, size_t dataLength, char* result, size_t resultSize)
+{
+  /* https://en.wikibooks.org/wiki/Algorithm_Implementation/Miscellaneous/Base64 */
+
+  const char base64chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const uint8_t *data = (const uint8_t *)data_buf;
+  size_t resultIndex = 0;
+  size_t x;
+  uint32_t n = 0;
+  int padCount = dataLength % 3;
+  uint8_t n0, n1, n2, n3;
+
+  /* increment over the length of the string, three characters at a time */
+  for (x = 0; x < dataLength; x += 3) 
+    {
+      /* these three 8-bit (ASCII) characters become one 24-bit number */
+      n = ((uint32_t)data[x]) << 16; //parenthesis needed, compiler depending on flags can do the shifting before conversion to uint32_t, resulting to 0
+      
+      if((x+1) < dataLength)
+	n += ((uint32_t)data[x+1]) << 8;//parenthesis needed, compiler depending on flags can do the shifting before conversion to uint32_t, resulting to 0
+      
+      if((x+2) < dataLength)
+	n += data[x+2];
+
+      /* this 24-bit number gets separated into four 6-bit numbers */
+      n0 = (uint8_t)(n >> 18) & 63;
+      n1 = (uint8_t)(n >> 12) & 63;
+      n2 = (uint8_t)(n >> 6) & 63;
+      n3 = (uint8_t)n & 63;
+            
+      /*
+       * if we have one byte available, then its encoding is spread
+       * out over two characters
+       */
+      if(resultIndex >= resultSize) return 1;   /* indicate failure: buffer too small */
+      result[resultIndex++] = base64chars[n0];
+      if(resultIndex >= resultSize) return 1;   /* indicate failure: buffer too small */
+      result[resultIndex++] = base64chars[n1];
+
+      /*
+       * if we have only two bytes available, then their encoding is
+       * spread out over three chars
+       */
+      if((x+1) < dataLength)
+	{
+	  if(resultIndex >= resultSize) return 1;   /* indicate failure: buffer too small */
+	  result[resultIndex++] = base64chars[n2];
+	}
+
+      /*
+       * if we have all three bytes available, then their encoding is spread
+       * out over four characters
+       */
+      if((x+2) < dataLength)
+	{
+	  if(resultIndex >= resultSize) return 1;   /* indicate failure: buffer too small */
+	  result[resultIndex++] = base64chars[n3];
+	}
+    }  
+
+  /*
+   * create and add padding that is required if we did not have a multiple of 3
+   * number of characters available
+   */
+  if (padCount > 0) 
+    { 
+      for (; padCount < 3; padCount++) 
+	{ 
+	  if(resultIndex >= resultSize) return 1;   /* indicate failure: buffer too small */
+	  result[resultIndex++] = '=';
+	} 
+    }
+  if(resultIndex >= resultSize) return 1;   /* indicate failure: buffer too small */
+  result[resultIndex] = 0;
+  return 0;   /* indicate success */
+}
+
+
+static uint8_t labelize(uint8_t* buf, uint8_t size)
+{
+  uint8_t i;
+
+  for (i = 0; i != ; )
+  {
+  }
+
+  return size;
+}
+
+static uint8_t make_wiloc_query
+(uint8_t* buf, uint8_t* macs, uint8_t nmac)
+{
+  /* http://www.zytrax.com/books/dns/ch15/#question */
+  /* http://www.ietf.org/rfc/rfc1034.txt */
+  /* http://www.ietf.org/rfc/rfc2181.txt */
+  /* the DNS protocol allows 1 query per packet */
+  /* a query is at most 256 chars */
+  /* a DNS name consists of labels */
+  /* due to coding, a label length is at most 63 chars */
+  /* by convention, 7 bits ASCII charset */
+  /* base64 used here */
+  /* encoding: base64, labelize, cat_zone, dns_name_encode */
+  /* decoding: dns_name_decode, strip_zone, delabelize, base64 */
+
+#define DNS_ZONE ".a.txne.gdn"
+#define DNS_MAX_LABEL_LEN 63
+
+  static const uint8_t mac_size = 6;
+  wiloc_req_t* const req = (wiloc_req_t*)buf;
+  uint8_t* data;
+  uint8_t size;
+  uint8_t i;
+
+  req->vers = WILOC_REQ_VERS;
+  req->flags = WILOC_REQ_FLAG_WIFI | WILOC_REQ_FLAG_TICK;
+  req->did = 0;
+
+  if (nmac > 32) mac = 32;
+  req->count = nmac;
+
+  size = 0;
+  data = req->data;
+  for (i = 0; i != nmac; ++i, data += mac_size, macs += mac_size)
+  {
+    memcpy(data, mac, mac_size);
+  }
+
+  
+}
+
+
 int main(int argc, char *argv[])
 {
 	int sockfd;
