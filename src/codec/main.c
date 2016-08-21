@@ -57,7 +57,7 @@ static small_size_t encode_base64
 }
 
 
-static small_size_t make_wiloc_query(uint8_t* qbuf, small_size_t qsize)
+static small_size_t encode_wiloc_req(uint8_t* rbuf, small_size_t rsize)
 {
   /* encoding process */
   /* fill wiloc_query */
@@ -67,7 +67,7 @@ static small_size_t make_wiloc_query(uint8_t* qbuf, small_size_t qsize)
   /* encode_name */
 
   static const small_size_t mac_size = 6;
-  wiloc_req_t* const req = (wiloc_req_t*)qbuf;
+  wiloc_req_t* const req = (wiloc_req_t*)rbuf;
   uint8_t tmp[SMALL_SIZE_MAX];
   small_size_t i;
   small_size_t j;
@@ -76,40 +76,40 @@ static small_size_t make_wiloc_query(uint8_t* qbuf, small_size_t qsize)
   /* base64 encoding */
 
   i = SMALL_SIZEOF(wiloc_req_t) + req->count * mac_size;
-  j = encode_base64(qbuf, i, tmp, SMALL_SIZEOF(tmp));
+  j = encode_base64(rbuf, i, tmp, SMALL_SIZEOF(tmp));
 
   /* add dots every 63 bytes chars */
   /* put a dot even at 0 for dns_name_encode to work in place */
 
   for (i = 0, k = 0; i != j; ++i, ++k)
   {
-    if ((i % 63) == 0) qbuf[k++] = '.';
-    qbuf[k] = tmp[i];
+    if ((i % 63) == 0) rbuf[k++] = '.';
+    rbuf[k] = tmp[i];
   }
 
   /* append zone */
 
-  for (i = 0; DNS_ZONE_NAME[i]; ++i, ++k) qbuf[k] = DNS_ZONE_NAME[i];
-  qbuf[k++] = 0;
+  for (i = 0; DNS_ZONE_NAME[i]; ++i, ++k) rbuf[k] = DNS_ZONE_NAME[i];
+  rbuf[k++] = 0;
 
   /* encode DNS name in place */
 
-  qbuf[0] = 0;
+  rbuf[0] = 0;
 
-  for (i = 1, j = 0; qbuf[i]; ++i)
+  for (i = 1, j = 0; rbuf[i]; ++i)
   {
-    if (qbuf[i] == '.')
+    if (rbuf[i] == '.')
     {
       j = i;
-      qbuf[i] = 0;
+      rbuf[i] = 0;
     }
     else
     {
-      ++qbuf[j];
+      ++rbuf[j];
     }
   }
 
-  qbuf[i++] = 0;
+  rbuf[i++] = 0;
 
   return i;
 }
@@ -187,9 +187,9 @@ static int decode_base64
   return 0;
 }
 
-static int parse_wiloc_query
+static int decode_wiloc_req
 (
- const uint8_t* qbuf, size_t qsize,
+ const uint8_t* rbuf, size_t rsize,
  uint8_t* macs, size_t* nmac
 )
 {
@@ -207,15 +207,15 @@ static int parse_wiloc_query
   size_t j;
   size_t k;
 
-  if (qsize <= sizeof(DNS_ZONE_NAME)) return -1;
-  qsize -= sizeof(DNS_ZONE_NAME);
+  if (rsize <= sizeof(DNS_ZONE_NAME)) return -1;
+  rsize -= sizeof(DNS_ZONE_NAME);
 
   i = 0;
   k = 0;
-  for (j = 0; j != qsize; ++j)
+  for (j = 0; j != rsize; ++j)
   {
-    if (j == k) k += (size_t)qbuf[j] + 1;
-    else tmp[i++] = qbuf[j];
+    if (j == k) k += (size_t)rbuf[j] + 1;
+    else tmp[i++] = rbuf[j];
   }
   tmp[i] = 0;
 
@@ -240,25 +240,25 @@ int main(int ac, char** av)
   uint8_t* macs;
   wiloc_req_t* req;
 
-  uint8_t qbuf[SMALL_SIZE_MAX];
+  uint8_t rbuf[SMALL_SIZE_MAX];
   small_size_t qlen;
   small_size_t i;
   size_t n;
 
   /* make request */
 
-  req = (wiloc_req_t*)qbuf;
+  req = (wiloc_req_t*)rbuf;
   req->vers = WILOC_REQ_VERS;
   req->flags = WILOC_REQ_FLAG_WIFI | WILOC_REQ_FLAG_TICK;
   req->did = 0x2a;
   req->count = nmac;
-  macs = qbuf + sizeof(wiloc_req_t);
+  macs = rbuf + sizeof(wiloc_req_t);
   for (i = 0; i != (nmac * maclen); ++i) macs[i] = i;
 
-  qlen = make_wiloc_query(qbuf, SMALL_SIZEOF(qbuf));
+  qlen = encode_wiloc_req(rbuf, SMALL_SIZEOF(rbuf));
   printf("qlen: %u\n", qlen);
 
-  parse_wiloc_query(qbuf, sizeof(qbuf), macs, &n);
+  decode_wiloc_req(rbuf, sizeof(rbuf), macs, &n);
 
   if (n != nmac)
   {
