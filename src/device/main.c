@@ -1,7 +1,13 @@
 #include <stdint.h>
 #include "../common/dns.h"
 #include "../common/wiloc.h"
+#include "./config.h"
 
+
+/* check configuration */
+#ifndef DNS_ZONE_NAME
+#error "missing DNS_ZONE_NAME (.my.zone.com)"
+#endif /* DNS_ZONE_NAME */
 
 
 /* wiloc message encoder */
@@ -381,8 +387,6 @@ static int udp_send
   ((struct sockaddr_in*)&sa)->sin_family = AF_INET;
   ((struct sockaddr_in*)&sa)->sin_port = htons(port);
   ((struct sockaddr_in*)&sa)->sin_addr.s_addr = inet_addr(addr);
-
-  printf("OK\n");
 
   nsent = (size_t)sendto
     (sock, buf, size, 0, (const struct sockaddr*)&sa, sizeof(sa));
