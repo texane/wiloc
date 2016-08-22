@@ -4,7 +4,7 @@
 import sys
 import json
 import requests
-try: import gpxpy
+try: import gpxpy, gpxpy.gpx
 except: gpxpy = None
 
 
@@ -148,7 +148,7 @@ def ofile_open(path, fmt):
 
 
 def ofile_close(ofile):
-    if fmt == 'gpx':
+    if ofile['fmt'] == 'gpx':
         try: ofile['buf'] = ofile['gpx'].to_xml()
         except: return -1
 
@@ -166,9 +166,9 @@ def ofile_add_coord(ofile, coord):
     lng = coord[1]
 
     if ofile['fmt'] == 'txt':
-        ofile['buf'] += lat + ', ' + lng + '\n'
+        ofile['buf'] += str(lat) + ', ' + str(lng) + '\n'
     elif ofile['fmt'] == 'gpx':
-        p = gpxpy.gpx.GPXTrackPoint(float(lat), float(lng))
+        p = gpxpy.gpx.GPXTrackPoint(lat, lng)
         ofile['gpx_segment'].points.append(p)
 
     return 0
@@ -184,10 +184,15 @@ def main(ac, av):
     all_macs = read_ifile(opts['ifile'])
     if all_macs == None: return -1
 
+    ofile = ofile_open(opts['ofile'], opts['ofmt'])
+    if ofile == None: return -1
+
     for macs in all_macs:
         coord = mac_to_coord(macs, opts['apikey'], proxy = opts['proxy'])
         if coord == None: continue
-        print(str(coord))
+        ofile_add_coord(ofile, coord)
+
+    ofile_close(ofile)
 
     return 0
 
