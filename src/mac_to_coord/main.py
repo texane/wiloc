@@ -4,6 +4,8 @@
 import sys
 import json
 import requests
+try: import gpxpy
+except: gpxpy = None
 
 
 def mac_to_coord(macs, apikey, proxy = None):
@@ -103,10 +105,73 @@ def get_opts(ac, av):
         if k[1:] not in opts.keys(): return None
         opts[k[1:]] = v
 
-    for k in [ 'ifile', 'ofile', 'apikey' ]:
+    for k in [ 'ifile', 'apikey' ]:
         if opts[k] == None: return None
 
+    if opts['ofmt'] == 'gpx':
+        if gpxpy == None:
+            print('ERROR: gpxpy not installed')
+            print('ERROR: https://github.com/tkrajina/gpxpy')
+            return None
+
     return opts
+
+
+def ofile_open(path, fmt):
+    ofile = {
+        'fmt': fmt,
+        'file': None,
+        'buf': '',
+        'gpx': None,
+        'gpx_track': None,
+        'gpx_segment': None
+    }
+
+    if path != None:
+        try: ofile['file'] = open(path, 'w')
+        except: return None
+
+    if fmt == 'gpx':
+        try:
+            gpx = gpxpy.gpx.GPX()
+            gpx_track = gpxpy.gpx.GPXTrack()
+            gpx_segment = gpxpy.gpx.GPXTrackSegment()
+            gpx.tracks.append(gpx_track)
+            gpx_track.segments.append(gpx_segment)
+            ofile['gpx'] = gpx
+            ofile['gpx_track'] = gpx_track
+            ofile['gpx_segment'] = gpx_segment
+        except:
+            return None
+
+    return ofile
+
+
+def ofile_close(ofile):
+    if fmt == 'gpx':
+        try: ofile['buf'] = ofile['gpx'].to_xml()
+        except: return -1
+
+    try:
+        if ofile['file'] == None: print(ofile['buf'])
+        else: ofile['file'].write(ofile['buf'])
+    except:
+        return -1
+
+    return 0
+
+
+def ofile_add_coord(ofile, coord):
+    lat = coord[0]
+    lng = coord[1]
+
+    if ofile['fmt'] == 'txt':
+        ofile['buf'] += lat + ', ' + lng + '\n'
+    elif ofile['fmt'] == 'gpx':
+        p = gpxpy.gpx.GPXTrackPoint(float(lat), float(lng))
+        ofile['gpx_segment'].points.append(p)
+
+    return 0
 
 
 def main(ac, av):
