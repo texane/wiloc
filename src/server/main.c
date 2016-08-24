@@ -1,11 +1,121 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <sys/types.h>
 #include "mongoose.h"
 
 
+/* device points database */
 
-/* wiloc server */
+typedef struct pointdb_entry
+{
+#define POINTDB_FLAG_HAS_COORDS (1 << 0)
+#define POINTDB_FLAG_HAS_MACS (1 << 1)
+#define POINTDB_FLAG_COORDS_FAILED (1 << 2)
+  uint32_t flags;
+
+  unsigned long time;
+
+  /* mac addresses */
+  uint8_t* macs;
+  size_t nmac;
+
+  /* lag, lng */
+  float coords[2];
+
+  struct pointdb_entry* next;
+
+} pointdb_entry_t;
+
+
+#define POINTDB_KEY_COUNT ((uint8_t)-1)
+static pointdb_entry_t* g_point_heads[POINTDB_KEY_COUNT];
+static pointdb_entry_t* g_point_tails[POINTDB_KEY_COUNT];
+
+
+static int pointdb_init(void)
+{
+  size_t i;
+
+  for (i = 0; i != POINTDB_KEY_COUNT; ++i)
+  {
+    g_point_heads[i] = NULL;
+    g_point_tails[i] = NULL;
+  }
+
+  return 0;
+}
+
+
+static void pointdb_flush(size_t did)
+{
+  pointdb_entry_t* pe = g_point_heads[did];
+
+  while (pe != NULL)
+  {
+    pointdb_entry_t* const tmp = pe;
+    pe = pe->next;
+    free(tmp);
+  }
+
+  g_point_heads[did] = NULL;
+  g_point_tails[did] = NULL;
+}
+
+
+static void pointdb_fini(void)
+{
+  size_t did;
+  for (did = 0; did != POINTDB_KEY_COUNT; ++did) pointdb_flush(did);
+}
+
+
+static pointdb_entry_t* pointdb_find(size_t did)
+{
+  return g_point_heads[did];
+}
+
+
+static int pointdb_get_coords(size_t did, pointdb_entry_t* pe)
+{
+  if (pe->flags & POINTDB_FLAG_COORDS_FAILED) return -1;
+  if (pe->flags & POINTDB_FLAG_HAS_COORDS) return 0;
+
+  if (pe->flags & POINTDB_FLAG_HAS_MACS)
+  {
+    /* TODO: execve(wget ...) */
+    return -1;
+  }
+
+  return -1;
+}
+
+
+static pointdb_entry_t* pointdb_add(size_t did)
+{
+  pointdb_entry_t* pe;
+
+  pe = malloc(sizeof(pointdb_entry_t));
+  if (pe == NULL) return NULL;
+
+  pe->next = NULL;
+
+  if (g_point_heads[did] == NULL)
+  {
+    g_point_heads[did] = pe;
+    g_point_tails[did] = pe;
+  }
+  else
+  {
+    g_point_tails[did]->next = pe;
+    g_point_tails[did] = pe;
+  }
+
+  return pe;
+}
+
+
+/* wiloc dns udp server */
 
 static const char* const wiloc_server_addr = "udp://127.0.0.1:53";
 
@@ -187,16 +297,26 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 
       serve_one_page(con, html);
     }
+    else if (mg_vcmp(&hm->uri, "/dump") == 0)
+    {
+      /* did=<did>, the device id (required) */
+
+      static const char* const html =
+	HTML_HEADER " <h2> doing dump </h2>" HTML_FOOTER;
+
+      serve_one_page(con, html);
+    }
     else /* index */
     {
       static const char* const html =
 	HTML_HEADER
-	" <h2> available actions </h2>"
-	"  <ul>"
-	"   <li> <a href=\"/list\"> list </a> </li>"
-	"   <li> <a href=\"/track\"> track </a> </li>"
-	"   <li> <a href=\"/flush\"> flush </a> </li>"
-	"  <u/l>"
+	"<h2> available actions </h2>"
+	"<ul>"
+	"<li> <a href=\"/list\"> list </a> </li>"
+	"<li> <a href=\"/track\"> track </a> </li>"
+	"<li> <a href=\"/dump\"> dump </a> </li>"
+	"<li> <a href=\"/flush\"> flush </a> </li>"
+	"</ul>"
 	HTML_FOOTER;
 
       serve_one_page(con, html);
