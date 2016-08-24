@@ -29,8 +29,9 @@ typedef struct pointdb_entry
 
 
 #define POINTDB_KEY_COUNT ((uint8_t)-1)
-static pointdb_entry_t* g_point_heads[POINTDB_KEY_COUNT];
-static pointdb_entry_t* g_point_tails[POINTDB_KEY_COUNT];
+static pointdb_entry_t* pointdb_heads[POINTDB_KEY_COUNT];
+static pointdb_entry_t* pointdb_tails[POINTDB_KEY_COUNT];
+static size_t pointdb_counts[POINTDB_KEY_COUNT];
 
 
 static int pointdb_init(void)
@@ -39,8 +40,9 @@ static int pointdb_init(void)
 
   for (i = 0; i != POINTDB_KEY_COUNT; ++i)
   {
-    g_point_heads[i] = NULL;
-    g_point_tails[i] = NULL;
+    pointdb_heads[i] = NULL;
+    pointdb_tails[i] = NULL;
+    pointdb_counts[i] = 0;
   }
 
   return 0;
@@ -49,7 +51,7 @@ static int pointdb_init(void)
 
 static void pointdb_flush(size_t did)
 {
-  pointdb_entry_t* pe = g_point_heads[did];
+  pointdb_entry_t* pe = pointdb_heads[did];
 
   while (pe != NULL)
   {
@@ -58,8 +60,9 @@ static void pointdb_flush(size_t did)
     free(tmp);
   }
 
-  g_point_heads[did] = NULL;
-  g_point_tails[did] = NULL;
+  pointdb_heads[did] = NULL;
+  pointdb_tails[did] = NULL;
+  pointdb_counts[did] = 0;
 }
 
 
@@ -72,7 +75,7 @@ static void pointdb_fini(void)
 
 static pointdb_entry_t* pointdb_find(size_t did)
 {
-  return g_point_heads[did];
+  return pointdb_heads[did];
 }
 
 
@@ -100,15 +103,15 @@ static pointdb_entry_t* pointdb_add(size_t did)
 
   pe->next = NULL;
 
-  if (g_point_heads[did] == NULL)
+  if (pointdb_heads[did] == NULL)
   {
-    g_point_heads[did] = pe;
-    g_point_tails[did] = pe;
+    pointdb_heads[did] = pe;
+    pointdb_tails[did] = pe;
   }
   else
   {
-    g_point_tails[did]->next = pe;
-    g_point_tails[did] = pe;
+    pointdb_tails[did]->next = pe;
+    pointdb_tails[did] = pe;
   }
 
   return pe;
@@ -227,7 +230,7 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 
   struct http_message* const hm = (struct http_message*)p;
 
-  static const uint8_t all_dids[] = { 0x2a, 0x3a, 0x4a, 0x5a };
+  static const size_t all_dids[] = { 0x2a, 0x3a, 0x4a, 0x5a };
 
   if (ev == MG_EV_HTTP_REQUEST)
   {
@@ -243,13 +246,17 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
       for (i = 0; i != sizeof(all_dids) / sizeof(all_dids[0]); ++i)
       {
 	char x[8];
-	sprintf(x, "0x%02x", all_dids[i]);
+	sprintf(x, "0x%02x", (uint8_t)all_dids[i]);
 	mg_printf_http_chunk(con, "<li>");
 	mg_printf_http_chunk(con, "%s", x);
+	mg_printf_http_chunk(con, "&nbsp;");
+	mg_printf_http_chunk(con, "(%zu points)", pointdb_counts[all_dids[i]]);
 	mg_printf_http_chunk(con, "&nbsp;");
 	mg_printf_http_chunk(con, "<a href=\"/track?did=%s\">track</a>", x);
 	mg_printf_http_chunk(con, "&nbsp;");
 	mg_printf_http_chunk(con, "<a href=\"/flush?did=%s\">flush</a>", x);
+	mg_printf_http_chunk(con, "&nbsp;");
+	mg_printf_http_chunk(con, "<a href=\"/dump?did=%s\">dump</a>", x);
 	mg_printf_http_chunk(con, "</li>");
       }
       mg_printf_http_chunk(con, "</ul>");
