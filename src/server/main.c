@@ -3,7 +3,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <signal.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include "mongoose.h"
 #include "../common/wiloc.h"
@@ -14,32 +17,58 @@
 
 typedef struct
 {
-  char** av;
+  const char* post_path;
+  const char* resp_path;
+  const char* wget_path;
+  char* url;
+  const char* av[6];
   char** env;
 } geoloc_handle_t;
 
 geoloc_handle_t g_geoloc;
 
-static int geoloc_init(geoloc_handle_t* geoloc)
+static int geoloc_init(geoloc_handle_t* geoloc, const char* api_key)
 {
-#if 0
-  static const char* geoloc_url = "";
-  static const char* geoloc_wget = "/usr/bin/wget";
-  u = 'https://www.googleapis.com/geolocation/v1/geolocate?';
-  u += 'key=' + apikey;
-#endif
+#define GEOLOC_URL \
+  "https://www.googleapis.com/geolocation/v1/geolocate?'" \
+  "key="
 
+#define GEOLOC_POST_PATH "/tmp/geoloc.post"
+#define GEOLOC_RESP_PATH "/tmp/geoloc.resp"
+#define GEOLOC_WGET_PATH "/usr/bin/wget"
+
+  const size_t key_len = strlen(api_key);
+  const size_t url_len = sizeof(GEOLOC_URL) - 1 + key_len;
+
+  geoloc->post_path = GEOLOC_POST_PATH;
+  geoloc->resp_path = GEOLOC_RESP_PATH;
+
+  geoloc->url = malloc((url_len + 1) * sizeof(char));
+  if (geoloc->url == NULL) goto on_error_0;
+  memcpy(geoloc->url, GEOLOC_URL, sizeof(GEOLOC_URL) - 1);
+  strcpy(geoloc->url + sizeof(GEOLOC_URL), api_key);
+
+  geoloc->wget_path = GEOLOC_WGET_PATH;
+
+  geoloc->av[0] = geoloc->wget_path;
+  geoloc->av[1] = "--post-file=" GEOLOC_POST_PATH;
+  geoloc->av[2] = "--header=\"Content-Type: application/json\"";
+  geoloc->av[3] = "-O " GEOLOC_RESP_PATH;
+  geoloc->av[4] = geoloc->url;
+  geoloc->av[5] = NULL;
+
+  geoloc->env = NULL;
+
+  return 0;
+
+ on_error_0:
   return -1;
 }
 
 
 static void geoloc_fini(geoloc_handle_t* geoloc)
 {
-  /* TODO */
-#if 0
-  free(geoloc->av);
-  free(geoloc->env);
-#endif
+  free(geoloc->url);
 }
 
 
@@ -48,44 +77,61 @@ static int geoloc_get_mac_coords
 {
   pid_t pid;
   int status;
+  int fd;
+  char buf[32];
+  size_t i;
+  size_t j;
+  int err = -1;
+
+  /* write macs in geoloc->post_data */
+
+#define GEOLOC_WRITE(__fd, __s) write(__fd, __s, sizeof(__s) - 1)
+
+  fd = open(geoloc->post_path, O_RDWR | O_TRUNC | O_CREAT);
+  if (fd == -1) goto on_error_0;
+
+  GEOLOC_WRITE(fd, "{\"wifiAccessPoints\":[");
+  for (i = 0; i != nmac; ++i)
+  {
+    const uint8_t* const mac = macs + i * 6;
+    for (j = 0; j != 6; ++j) sprintf(buf + j * 3, "%02x:", mac[j]);
+    GEOLOC_WRITE(fd, "{ \"macAddress\": \"");
+    write(fd, buf, 17);
+    GEOLOC_WRITE(fd, "\" }");
+    if (i != (nmac - 1)) GEOLOC_WRITE(fd, ", ");
+  }
+  GEOLOC_WRITE(fd, "]}");
+
+  /* execute wget */
 
   pid = fork();
 
-  if (pid == (pid_t)-1)
-  {
-    /* error */
-    return -1;
-  }
+  if (pid == (pid_t)-1) goto on_error_1;
 
   if (pid == 0)
   {
     /* child process */
-    execve(geoloc->av[0], geloc->av, geoloc->env);
+    execve(geoloc->av[0], (void*)geoloc->av, geoloc->env);
     exit(-1);
   }
 
   /* parent process */
 
-  if (waitpid(pid, &status, 0) == (pid_t)-1)
-  {
-    kill(pid);
-    return 0;
-  }
+  if (waitpid(pid, &status, 0) == (pid_t)-1) goto on_error_2;
+  if (WIFEXITED(status) == 0) goto on_error_2;
+  if (WEXITSTATUS(status)) goto on_error_3;
 
   /* status ok, parse output json file to get coords */
 
-  else if (pid > 0)
-  {
+  err = 0;
 
-  }
-
-  char* av[2];
-
-  av[0] = "/usr/bin/wget";
-  av[1] = "";
-
-  /* TODO: execve(wget ...) */
-  return -1;
+ on_error_3: goto on_error_1;
+ on_error_2:
+  kill(pid, SIGTERM);
+ on_error_1:
+  close(fd);
+ on_error_0:
+  return err;
 }
 
 
@@ -191,7 +237,7 @@ static int pointdb_get_coords(size_t did, double** coords, size_t* ncoord)
     {
       if ((pe->flags & POINTDB_FLAG_HAS_MACS) == 0) continue ;
 
-      if (get_mac_coords(pe->coords, pe->macs, pe->nmacs))
+      if (geoloc_get_mac_coords(&g_geoloc, pe->coords, pe->macs, pe->nmac))
       {
 	pe->flags |= POINTDB_FLAG_COORDS_FAILED;
 	continue ;
@@ -608,7 +654,7 @@ int main(void)
   int err = -1;
 
   if (pointdb_init()) goto on_error_0;
-  if (geoloc_init(&g_geloc)) goto on_error_1;
+  if (geoloc_init(&g_geoloc, NULL)) goto on_error_1;
 
   mg_mgr_init(&mgr, NULL);
 
