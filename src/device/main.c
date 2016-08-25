@@ -526,7 +526,7 @@ static int wifi_main(int ac, char** av)
 
 #ifdef TARGET_LINUX
 
-#if 0
+#if 1
 
 #include <stdio.h>
 #include <stdint.h>
@@ -536,36 +536,6 @@ static int wifi_main(int ac, char** av)
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include "../common/dns.h"
-
-static int udp_send
-(
- const char* addr, uint16_t port,
- const uint8_t* buf, size_t size
-)
-{
-  int err = -1;
-  int sock;
-  size_t nsent;
-  struct sockaddr sa;
-
-  sock = socket(AF_INET, SOCK_DGRAM, 0);
-  if (sock == -1) goto on_error_0;
-
-  memset(&sa, 0, sizeof(sa));
-  ((struct sockaddr_in*)&sa)->sin_family = AF_INET;
-  ((struct sockaddr_in*)&sa)->sin_port = htons(port);
-  ((struct sockaddr_in*)&sa)->sin_addr.s_addr = inet_addr(addr);
-
-  nsent = (size_t)sendto
-    (sock, buf, size, 0, (const struct sockaddr*)&sa, sizeof(sa));
-  if (nsent != size) goto on_error_1;
-
-  err = 0;
- on_error_1:
-  close(sock);
- on_error_0:
-  return err;
-}
 
 
 /* command line */
