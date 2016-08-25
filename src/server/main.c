@@ -1,9 +1,92 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include "mongoose.h"
 #include "../common/wiloc.h"
+
+
+
+/* google geolocation api */
+
+typedef struct
+{
+  char** av;
+  char** env;
+} geoloc_handle_t;
+
+geoloc_handle_t g_geoloc;
+
+static int geoloc_init(geoloc_handle_t* geoloc)
+{
+#if 0
+  static const char* geoloc_url = "";
+  static const char* geoloc_wget = "/usr/bin/wget";
+  u = 'https://www.googleapis.com/geolocation/v1/geolocate?';
+  u += 'key=' + apikey;
+#endif
+
+  return -1;
+}
+
+
+static void geoloc_fini(geoloc_handle_t* geoloc)
+{
+  /* TODO */
+#if 0
+  free(geoloc->av);
+  free(geoloc->env);
+#endif
+}
+
+
+static int geoloc_get_mac_coords
+(geoloc_handle_t* geoloc, double* coords, const uint8_t* macs, size_t nmac)
+{
+  pid_t pid;
+  int status;
+
+  pid = fork();
+
+  if (pid == (pid_t)-1)
+  {
+    /* error */
+    return -1;
+  }
+
+  if (pid == 0)
+  {
+    /* child process */
+    execve(geoloc->av[0], geloc->av, geoloc->env);
+    exit(-1);
+  }
+
+  /* parent process */
+
+  if (waitpid(pid, &status, 0) == (pid_t)-1)
+  {
+    kill(pid);
+    return 0;
+  }
+
+  /* status ok, parse output json file to get coords */
+
+  else if (pid > 0)
+  {
+
+  }
+
+  char* av[2];
+
+  av[0] = "/usr/bin/wget";
+  av[1] = "";
+
+  /* TODO: execve(wget ...) */
+  return -1;
+}
 
 
 /* device points database */
@@ -22,7 +105,7 @@ typedef struct pointdb_entry
   size_t nmac;
 
   /* lag, lng */
-  float coords[2];
+  double coords[2];
 
   struct pointdb_entry* next;
 
@@ -46,6 +129,8 @@ static int pointdb_init(void)
     pointdb_counts[i] = 0;
   }
 
+  /* TODO: init pointdb_apiurl */
+
   return 0;
 }
 
@@ -65,6 +150,8 @@ static void pointdb_flush(size_t did)
   pointdb_heads[did] = NULL;
   pointdb_tails[did] = NULL;
   pointdb_counts[did] = 0;
+
+  /* TODO: free pointdb_apiurl */
 }
 
 
@@ -81,19 +168,47 @@ static pointdb_entry_t* pointdb_find(size_t did)
 }
 
 
-static int pointdb_get_coords(size_t did, pointdb_entry_t* pe)
+static int pointdb_get_coords(size_t did, double** coords, size_t* ncoord)
 {
-  if (pe->flags & POINTDB_FLAG_COORDS_FAILED) return -1;
-  if (pe->flags & POINTDB_FLAG_HAS_COORDS) return 0;
+  pointdb_entry_t* pe;
+  size_t i;
 
-  if (pe->flags & POINTDB_FLAG_HAS_MACS)
+  *coords = NULL;
+  *ncoord = pointdb_counts[did];
+
+  /* success, but nothing to locate */
+  if (ncoord == 0) return 0;
+
+  *coords = malloc((*ncoord * 2) * sizeof(double));
+  if (*coords == NULL) return -1;
+
+  i = 0;
+  for (pe = pointdb_heads[did]; pe != NULL; pe = pe->next)
   {
-    /* TODO: execve(wget ...) */
-    /* pe->flags |= POINTDB_FLAG_HAS_COORDS; */
-    return -1;
+    if (pe->flags & POINTDB_FLAG_COORDS_FAILED) continue ;
+
+    if ((pe->flags & POINTDB_FLAG_HAS_COORDS) == 0)
+    {
+      if ((pe->flags & POINTDB_FLAG_HAS_MACS) == 0) continue ;
+
+      if (get_mac_coords(pe->coords, pe->macs, pe->nmacs))
+      {
+	pe->flags |= POINTDB_FLAG_COORDS_FAILED;
+	continue ;
+      }
+
+      pe->flags |= POINTDB_FLAG_HAS_COORDS;
+    }
+
+    (*coords)[(i * 2) + 0] = pe->coords[0];
+    (*coords)[(i * 2) + 1] = pe->coords[1];
+
+    ++i;
   }
 
-  return -1;
+  *ncoord = i;
+
+  return 0;
 }
 
 
@@ -493,6 +608,7 @@ int main(void)
   int err = -1;
 
   if (pointdb_init()) goto on_error_0;
+  if (geoloc_init(&g_geloc)) goto on_error_1;
 
   mg_mgr_init(&mgr, NULL);
 
@@ -500,7 +616,7 @@ int main(void)
   if (http_con == NULL)
   {
     printf("failed to create http server\n");
-    goto on_error_1;
+    goto on_error_2;
   }
   mg_set_protocol_http_websocket(http_con);
   http_server_opts.document_root = ".";
@@ -510,7 +626,7 @@ int main(void)
   if (dns_con == NULL)
   {
     printf("failed to create wiloc server\n");
-    goto on_error_1;
+    goto on_error_2;
   }
   mg_set_protocol_dns(dns_con);
 
@@ -518,8 +634,10 @@ int main(void)
 
   err = 0;
 
- on_error_1:
+ on_error_2:
   mg_mgr_free(&mgr);
+  geoloc_fini(&g_geoloc);
+ on_error_1:
   pointdb_fini();
  on_error_0:
   return err;
