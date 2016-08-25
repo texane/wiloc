@@ -80,15 +80,18 @@ static int geoloc_get_mac_coords
 {
   pid_t pid;
   int status;
-  int fd;
-  char buf[32];
+  int fd = -1;
+  char buf[256];
+  size_t size;
   size_t i;
   size_t j;
   int err = -1;
 
   /* write macs in geoloc->post_data */
 
-#define GEOLOC_WRITE(__fd, __s) write(__fd, __s, sizeof(__s) - 1)
+#define GEOLOC_STRLEN(__s) (sizeof(__s) - 1)
+#define GEOLOC_WRITE(__fd, __s) write(__fd, __s, GEOLOC_STRLEN(__s))
+#define GEOLOC_MEMCMP(__a, __b) memcmp(__a, __b, GEOLOC_STRLEN(__b))
 
   fd = open(geoloc->post_path, O_RDWR | O_TRUNC | O_CREAT, 0477);
   if (fd == -1) goto on_error_0;
@@ -104,6 +107,9 @@ static int geoloc_get_mac_coords
     if (i != (nmac - 1)) GEOLOC_WRITE(fd, ",");
   }
   GEOLOC_WRITE(fd, "]}");
+
+  close(fd);
+  fd = -1;
 
   /* execute wget */
 
@@ -124,7 +130,24 @@ static int geoloc_get_mac_coords
   if (WIFEXITED(status) == 0) goto on_error_2;
   if (WEXITSTATUS(status)) goto on_error_3;
 
-  /* status ok, parse output json file to get coords */
+  /* status ok, parse output file to get coords */
+
+  fd = open(geoloc->resp_path, O_RDONLY);
+  if (fd == -1) goto on_error_3;
+
+  size = read(fd, buf, sizeof(buf) - 1);
+  if (size <= 0) goto on_error_3;
+  buf[size] = 0;
+
+  for (i = 0; (size - i) > GEOLOC_STRLEN("\"lat\": "); ++i)
+    if (GEOLOC_MEMCMP(buf + i, "\"lat\": ") == 0) break ;
+  if ((size - i) <= (GEOLOC_STRLEN("\"lat\": "))) goto on_error_3;
+  coords[0] = strtod(buf + i + GEOLOC_STRLEN("\"lat\": "), NULL);
+
+  for (; (size - i) > GEOLOC_STRLEN("\"lng\": "); ++i)
+    if (GEOLOC_MEMCMP(buf + i, "\"lng\": ") == 0) break ;
+  if ((size - i) <= (GEOLOC_STRLEN("\"lng\": "))) goto on_error_3;
+  coords[1] = strtod(buf + i + GEOLOC_STRLEN("\"lng\": "), NULL);
 
   err = 0;
 
@@ -132,7 +155,7 @@ static int geoloc_get_mac_coords
  on_error_2:
   kill(pid, SIGTERM);
  on_error_1:
-  close(fd);
+  if (fd != -1) close(fd);
  on_error_0:
   return err;
 }
