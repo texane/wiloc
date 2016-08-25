@@ -11,6 +11,8 @@
 #include "mongoose.h"
 #include "../common/wiloc.h"
 
+extern char** environ;
+
 
 
 /* google geolocation api */
@@ -21,7 +23,7 @@ typedef struct
   const char* resp_path;
   const char* wget_path;
   char* url;
-  const char* av[6];
+  const char* av[7];
   char** env;
 } geoloc_handle_t;
 
@@ -30,7 +32,7 @@ geoloc_handle_t g_geoloc;
 static int geoloc_init(geoloc_handle_t* geoloc, const char* api_key)
 {
 #define GEOLOC_URL \
-  "https://www.googleapis.com/geolocation/v1/geolocate?'" \
+  "https://www.googleapis.com/geolocation/v1/geolocate?" \
   "key="
 
 #define GEOLOC_POST_PATH "/tmp/geoloc.post"
@@ -46,18 +48,19 @@ static int geoloc_init(geoloc_handle_t* geoloc, const char* api_key)
   geoloc->url = malloc((url_len + 1) * sizeof(char));
   if (geoloc->url == NULL) goto on_error_0;
   memcpy(geoloc->url, GEOLOC_URL, sizeof(GEOLOC_URL) - 1);
-  strcpy(geoloc->url + sizeof(GEOLOC_URL), api_key);
+  strcpy(geoloc->url + sizeof(GEOLOC_URL) - 1, api_key);
 
   geoloc->wget_path = GEOLOC_WGET_PATH;
 
   geoloc->av[0] = geoloc->wget_path;
   geoloc->av[1] = "--post-file=" GEOLOC_POST_PATH;
-  geoloc->av[2] = "--header=\"Content-Type: application/json\"";
-  geoloc->av[3] = "-O " GEOLOC_RESP_PATH;
-  geoloc->av[4] = geoloc->url;
-  geoloc->av[5] = NULL;
+  geoloc->av[2] = "--header=Content-Type: application/json";
+  geoloc->av[3] = "--output-document=" GEOLOC_RESP_PATH;
+  geoloc->av[4] = "--quiet";
+  geoloc->av[5] = geoloc->url;
+  geoloc->av[6] = NULL;
 
-  geoloc->env = NULL;
+  geoloc->env = environ;
 
   return 0;
 
@@ -87,7 +90,7 @@ static int geoloc_get_mac_coords
 
 #define GEOLOC_WRITE(__fd, __s) write(__fd, __s, sizeof(__s) - 1)
 
-  fd = open(geoloc->post_path, O_RDWR | O_TRUNC | O_CREAT);
+  fd = open(geoloc->post_path, O_RDWR | O_TRUNC | O_CREAT, 0477);
   if (fd == -1) goto on_error_0;
 
   GEOLOC_WRITE(fd, "{\"wifiAccessPoints\":[");
@@ -95,10 +98,10 @@ static int geoloc_get_mac_coords
   {
     const uint8_t* const mac = macs + i * 6;
     for (j = 0; j != 6; ++j) sprintf(buf + j * 3, "%02x:", mac[j]);
-    GEOLOC_WRITE(fd, "{ \"macAddress\": \"");
+    GEOLOC_WRITE(fd, "{\"macAddress\":\"");
     write(fd, buf, 17);
-    GEOLOC_WRITE(fd, "\" }");
-    if (i != (nmac - 1)) GEOLOC_WRITE(fd, ", ");
+    GEOLOC_WRITE(fd, "\"}");
+    if (i != (nmac - 1)) GEOLOC_WRITE(fd, ",");
   }
   GEOLOC_WRITE(fd, "]}");
 
@@ -158,32 +161,35 @@ typedef struct pointdb_entry
 } pointdb_entry_t;
 
 
+typedef struct
+{
 #define WILOC_DID_MAX 0x100 /* not inclusive */
-static pointdb_entry_t* pointdb_heads[WILOC_DID_MAX];
-static pointdb_entry_t* pointdb_tails[WILOC_DID_MAX];
-static size_t pointdb_counts[WILOC_DID_MAX];
+  pointdb_entry_t* heads[WILOC_DID_MAX];
+  pointdb_entry_t* tails[WILOC_DID_MAX];
+  size_t counts[WILOC_DID_MAX];
+} pointdb_handle_t;
+
+static pointdb_handle_t g_pointdb;
 
 
-static int pointdb_init(void)
+static int pointdb_init(pointdb_handle_t* db)
 {
   size_t i;
 
   for (i = 0; i != WILOC_DID_MAX; ++i)
   {
-    pointdb_heads[i] = NULL;
-    pointdb_tails[i] = NULL;
-    pointdb_counts[i] = 0;
+    db->heads[i] = NULL;
+    db->tails[i] = NULL;
+    db->counts[i] = 0;
   }
-
-  /* TODO: init pointdb_apiurl */
 
   return 0;
 }
 
 
-static void pointdb_flush(size_t did)
+static void pointdb_flush(pointdb_handle_t* db, size_t did)
 {
-  pointdb_entry_t* pe = pointdb_heads[did];
+  pointdb_entry_t* pe = db->heads[did];
 
   while (pe != NULL)
   {
@@ -193,43 +199,44 @@ static void pointdb_flush(size_t did)
     free(tmp);
   }
 
-  pointdb_heads[did] = NULL;
-  pointdb_tails[did] = NULL;
-  pointdb_counts[did] = 0;
+  db->heads[did] = NULL;
+  db->tails[did] = NULL;
+  db->counts[did] = 0;
 
   /* TODO: free pointdb_apiurl */
 }
 
 
-static void pointdb_fini(void)
+static void pointdb_fini(pointdb_handle_t* db)
 {
   size_t did;
-  for (did = 0; did != WILOC_DID_MAX; ++did) pointdb_flush(did);
+  for (did = 0; did != WILOC_DID_MAX; ++did) pointdb_flush(db, did);
 }
 
 
-static pointdb_entry_t* pointdb_find(size_t did)
+static pointdb_entry_t* pointdb_find(pointdb_handle_t* db, size_t did)
 {
-  return pointdb_heads[did];
+  return db->heads[did];
 }
 
 
-static int pointdb_get_coords(size_t did, double** coords, size_t* ncoord)
+static int pointdb_get_coords
+(pointdb_handle_t* db, size_t did, double** coords, size_t* ncoord)
 {
   pointdb_entry_t* pe;
   size_t i;
 
   *coords = NULL;
-  *ncoord = pointdb_counts[did];
+  *ncoord = db->counts[did];
 
   /* success, but nothing to locate */
-  if (ncoord == 0) return 0;
+  if (*ncoord == 0) return 0;
 
   *coords = malloc((*ncoord * 2) * sizeof(double));
   if (*coords == NULL) return -1;
 
   i = 0;
-  for (pe = pointdb_heads[did]; pe != NULL; pe = pe->next)
+  for (pe = db->heads[did]; pe != NULL; pe = pe->next)
   {
     if (pe->flags & POINTDB_FLAG_COORDS_FAILED) continue ;
 
@@ -259,7 +266,7 @@ static int pointdb_get_coords(size_t did, double** coords, size_t* ncoord)
 
 
 static pointdb_entry_t* pointdb_add_wifi
-(size_t did, const uint8_t* macs, size_t nmac)
+(pointdb_handle_t* db, size_t did, const uint8_t* macs, size_t nmac)
 {
   pointdb_entry_t* pe;
   const size_t mac_size = nmac * 6;
@@ -271,6 +278,7 @@ static pointdb_entry_t* pointdb_add_wifi
 
   pe->time = 0;
 
+  pe->nmac = nmac;
   pe->macs = malloc(mac_size * sizeof(uint8_t));
   if (pe->macs == NULL)
   {
@@ -282,18 +290,18 @@ static pointdb_entry_t* pointdb_add_wifi
 
   pe->next = NULL;
 
-  if (pointdb_heads[did] == NULL)
+  if (db->heads[did] == NULL)
   {
-    pointdb_heads[did] = pe;
-    pointdb_tails[did] = pe;
+    db->heads[did] = pe;
+    db->tails[did] = pe;
   }
   else
   {
-    pointdb_tails[did]->next = pe;
-    pointdb_tails[did] = pe;
+    db->tails[did]->next = pe;
+    db->tails[did] = pe;
   }
 
-  ++pointdb_counts[did];
+  ++db->counts[did];
 
   return pe;
 }
@@ -434,7 +442,12 @@ static void dns_ev_handler(struct mg_connection* con, int ev, void* p)
 	if (((size_t)wilm->count * 6) > (msize - sizeof(wiloc_msg_t))) break ;
 
 	pe = pointdb_add_wifi
-	  ((size_t)wilm->did, mbuf + sizeof(wiloc_msg_t), (size_t)wilm->count);
+	(
+	 &g_pointdb,
+	 (size_t)wilm->did, mbuf + sizeof(wiloc_msg_t),
+	 (size_t)wilm->count
+	);
+
 	if (pe == NULL) break ;
       }
 
@@ -570,13 +583,13 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
       {
 	char x[8];
 
-	if (pointdb_counts[did] == 0) continue ;
+	if (g_pointdb.counts[did] == 0) continue ;
 
 	sprintf(x, "0x%02x", (uint8_t)did);
 	mg_printf_http_chunk(con, "<li>");
 	mg_printf_http_chunk(con, "%s", x);
 	mg_printf_http_chunk(con, "&nbsp;");
-	mg_printf_http_chunk(con, "(%zu points)", pointdb_counts[did]);
+	mg_printf_http_chunk(con, "(%zu points)", g_pointdb.counts[did]);
 	mg_printf_http_chunk(con, "&nbsp;");
 	mg_printf_http_chunk(con, "<a href=\"/track?did=%s\">track</a>", x);
 	mg_printf_http_chunk(con, "&nbsp;");
@@ -599,6 +612,9 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
       /* ofmt={txt,gpx}, the device id (optional, default to txt) */
 
       uint32_t did;
+      double* coords;
+      size_t ncoord;
+      size_t i;
 
       if (get_query_val_uint32(hm, "did", &did))
       {
@@ -606,7 +622,30 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 	return ;
       }
 
-      serve_failure_page(con, "not implemented");
+      if (pointdb_get_coords(&g_pointdb, did, &coords, &ncoord))
+      {
+	serve_failure_page(con, "getting coordinates");
+	return ;
+      }
+
+      init_response(con);
+
+      mg_printf_http_chunk(con, HTML_HEADER);
+
+      mg_printf_http_chunk(con, "<ul>");
+      for (i = 0; i != ncoord; ++i)
+      {
+	const double lat = coords[i * 2 + 0];
+	const double lng = coords[i * 2 + 1];
+	mg_printf_http_chunk(con, "<li> %lf, %lf </li>", lat, lng);
+      }
+      mg_printf_http_chunk(con, "</ul>");
+
+      mg_printf_http_chunk(con, HTML_FOOTER);
+
+      fini_response(con);
+
+      free(coords);
 
       return ;
     }
@@ -622,7 +661,7 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 	return ;
       }
 
-      pointdb_flush((size_t)did);
+      pointdb_flush(&g_pointdb, (size_t)did);
       serve_success_page(con);
       return ;
     }
@@ -646,15 +685,15 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 
 /* main */
 
-int main(void)
+int main(int ac, char** av)
 {
   struct mg_mgr mgr;
   struct mg_connection* dns_con;
   struct mg_connection* http_con;
   int err = -1;
 
-  if (pointdb_init()) goto on_error_0;
-  if (geoloc_init(&g_geoloc, NULL)) goto on_error_1;
+  if (pointdb_init(&g_pointdb)) goto on_error_0;
+  if (geoloc_init(&g_geoloc, av[1])) goto on_error_1;
 
   mg_mgr_init(&mgr, NULL);
 
@@ -684,7 +723,7 @@ int main(void)
   mg_mgr_free(&mgr);
   geoloc_fini(&g_geoloc);
  on_error_1:
-  pointdb_fini();
+  pointdb_fini(&g_pointdb);
  on_error_0:
   return err;
 }
