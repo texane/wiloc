@@ -37,6 +37,11 @@ typedef struct
 
 geoloc_handle_t g_geoloc;
 
+static unsigned int geoloc_is_disabled(const geoloc_handle_t* geoloc)
+{
+  return (unsigned int)(geoloc->flags & GEOLOC_FLAG_DISABLED);
+}
+
 static int geoloc_init(geoloc_handle_t* geoloc, const char* key)
 {
 #define GEOLOC_URL \
@@ -89,7 +94,7 @@ static int geoloc_init(geoloc_handle_t* geoloc, const char* key)
 
 static void geoloc_fini(geoloc_handle_t* geoloc)
 {
-  if (geoloc->flags | GEOLOC_FLAG_DISABLED) return ;
+  if (geoloc_is_disabled(geoloc)) return ;
   free(geoloc->url);
 }
 
@@ -106,7 +111,7 @@ static int geoloc_get_mac_coords
   size_t j;
   int err = -1;
 
-  if (geoloc->flags | GEOLOC_FLAG_DISABLED) return -1;
+  if (geoloc_is_disabled(geoloc)) return -1;
 
   /* write macs in geoloc->post_data */
 
@@ -502,6 +507,7 @@ static struct mg_serve_http_opts http_server_opts;
 
 #define HTML_HEADER "<html><body>"
 #define HTML_FOOTER "</body></html>"
+#define HTML_GOTO_MAIN "<a href=\"/\"> goto main page </a>"
 
 static void init_response(struct mg_connection* con)
 {
@@ -524,14 +530,21 @@ static void serve_one_page(struct mg_connection* con, const char* page)
 static void serve_success_page(struct mg_connection* con)
 {
   static const char* const html =
-    HTML_HEADER "<h2> operation success </h2>" HTML_FOOTER;
+    HTML_HEADER
+    "<h2> success </h2>"
+    HTML_GOTO_MAIN
+    HTML_FOOTER;
+
   serve_one_page(con, html);
 }
 
 static void serve_failure_page(struct mg_connection* con, const char* err)
 {
   static const char* const html =
-    HTML_HEADER "<h2> operation failure: %s </h2>" HTML_FOOTER;
+    HTML_HEADER
+    "<h2> failure: %s </h2>"
+    HTML_GOTO_MAIN
+    HTML_FOOTER;
 
   init_response(con);
   mg_printf_http_chunk(con, html, (err == NULL) ? "unspecified error" : err);
@@ -658,6 +671,12 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
       double* coords;
       size_t ncoord;
       size_t i;
+
+      if (geoloc_is_disabled(&g_geoloc))
+      {
+	serve_failure_page(con, "geolocation is disabled");
+	return ;
+      }
 
       if (get_query_val_uint32(hm, "did", &did))
       {
