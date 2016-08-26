@@ -509,9 +509,19 @@ static struct mg_serve_http_opts http_server_opts;
 #define HTML_FOOTER "</body></html>"
 #define HTML_GOTO_MAIN "<a href=\"/\"> goto main page </a>"
 
-static void init_response(struct mg_connection* con)
+static void init_response(struct mg_connection* con, const char* content_type)
 {
-  mg_printf(con, "%s", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n");
+  if (content_type == NULL) content_type = "text/html; charset=utf-8";
+
+  mg_printf
+  (
+   con,
+   "HTTP/1.1 200 OK\r\n"
+   "Transfer-Encoding: chunked\r\n"
+   "Content-Type: %s\r\n"
+   "\r\n",
+   content_type
+  );
 }
 
 static void fini_response(struct mg_connection* con)
@@ -522,7 +532,7 @@ static void fini_response(struct mg_connection* con)
 
 static void serve_one_page(struct mg_connection* con, const char* page)
 {
-  init_response(con);
+  init_response(con, NULL);
   mg_printf_http_chunk(con, "%s", page);
   fini_response(con);
 }
@@ -546,7 +556,7 @@ static void serve_failure_page(struct mg_connection* con, const char* err)
     HTML_GOTO_MAIN
     HTML_FOOTER;
 
-  init_response(con);
+  init_response(con, NULL);
   mg_printf_http_chunk(con, html, (err == NULL) ? "unspecified error" : err);
   fini_response(con);
 }
@@ -624,7 +634,7 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
       size_t did;
       size_t n;
 
-      init_response(con);
+      init_response(con, NULL);
 
       mg_printf_http_chunk(con, HTML_HEADER);
 
@@ -727,30 +737,28 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 	return ;
       }
 
-      init_response(con);
-
-      mg_printf_http_chunk(con, HTML_HEADER);
-
-      mg_printf_http_chunk(con, "<pre><code>");
-
-      if (is_gpx == 1)
+      if (is_gpx == 0)
       {
-#define HTML_LT "&lt;"
-#define HTML_GT "&gt;"
-
+	init_response(con, NULL);
+	mg_printf_http_chunk(con, HTML_HEADER);
+	mg_printf_http_chunk(con, "<pre><code>");
+      }
+      else
+      {
 	static const char* const gpx_html_header =
-	  HTML_LT "?xml version=\"1.0\" encoding=\"UTF-8\"?" HTML_GT "\n"
-	  HTML_LT
-	  "gpx xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\""
-	  "xmlns=\"http://www.topografix.com/GPX/1/0\"" "\n"
-	  "xsi:schemaLocation=\"http://www.topografix.com/GPX/1/0/gpx.xsd\"\n"
-	  "version=\"1.0\"" "\n"
-	  "creator=\"gpx.py -- https://github.com/tkrajina/gpxpy\"\n"
-	  HTML_GT "\n"
-	  HTML_LT "trk" HTML_GT "\n"
-	  HTML_LT "trkseg" HTML_GT;
+	  "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+	  "<gpx"
+	  " xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\""
+	  " xmlns=\"http://www.topografix.com/GPX/1/0\""
+	  " xsi:schemaLocation=\"http://www.topografix.com/GPX/1/0/gpx.xsd\""
+	  " version=\"1.0\""
+	  " creator=\"gpx.py -- https://github.com/tkrajina/gpxpy\""
+	  ">\n"
+	  "<trk>"
+	  "<trkseg>\n";
 
-	mg_printf_http_chunk(con, "%s\n", gpx_html_header);
+	init_response(con, "application/xml");
+	mg_printf_http_chunk(con, gpx_html_header);
       }
 
       for (i = 0; i != ncoord; ++i)
@@ -761,13 +769,7 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 	if (is_gpx == 1)
 	{
 	  mg_printf_http_chunk
-	  (
-	   con,
-	   HTML_LT "trkpt lat=\"%lf\" lon=\"%lf\"" HTML_GT
-	   HTML_LT "/trkpt" HTML_GT
-	   "\n",
-	   lat, lng
-	  );
+	    (con, "<trkpt lat=\"%lf\" lon=\"%lf\"></trkpt>\n", lat, lng);
 	}
 	else /* csv */
 	{
@@ -777,19 +779,14 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 
       if (is_gpx == 1)
       {
-	mg_printf_http_chunk
-	(
-	 con,
-	 HTML_LT "/trkseg" HTML_GT
-	 HTML_LT "/trk" HTML_GT
-	 HTML_LT "/gpx" HTML_GT
-	 "\n"
-	);
+	mg_printf_http_chunk(con, "</trkseg></trk></gpx>\n");
       }
 
-      mg_printf_http_chunk(con, "</code></pre>");
-
-      mg_printf_http_chunk(con, HTML_FOOTER);
+      if (is_gpx == 0)
+      {
+	mg_printf_http_chunk(con, "</code></pre>");
+	mg_printf_http_chunk(con, HTML_FOOTER);
+      }
 
       fini_response(con);
 
