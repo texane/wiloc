@@ -345,8 +345,6 @@ static pointdb_entry_t* pointdb_add_wifi
 
 /* wiloc dns udp server */
 
-static const char* const dns_server_addr = "udp://127.0.0.1:53";
-
 static int decode_base64(uint8_t* in, size_t len)
 { 
   static const uint8_t d[] =
@@ -500,7 +498,6 @@ static void dns_ev_handler(struct mg_connection* con, int ev, void* p)
 
 /* http server */
 
-static const char *http_server_addr = "127.0.0.1:8000";
 static struct mg_serve_http_opts http_server_opts;
 
 #define HTML_HEADER "<html><body>"
@@ -812,23 +809,39 @@ int main(int ac, char** av)
   struct mg_mgr mgr;
   struct mg_connection* dns_con;
   struct mg_connection* http_con;
+  char buf[256];
   int err = -1;
 
   if (opt_init(g_opt, ac, av)) PERROR_GOTO(on_error_0);
+
   if (pointdb_init(&g_pointdb)) PERROR_GOTO(on_error_0);
-  if (geoloc_init(&g_geoloc, av[1])) PERROR_GOTO(on_error_1);
+
+  /* not an error to fail */
+  geoloc_init(&g_geoloc, opt_get(g_opt, "geoloc_key"));
 
   mg_mgr_init(&mgr, NULL);
 
-  http_con = mg_bind(&mgr, http_server_addr, http_ev_handler);
-  if (http_con == NULL) PERROR_GOTO(on_error_2);
+  snprintf
+  (
+   buf, sizeof(buf), "%s:%s",
+   opt_get(g_opt, "http_laddr"),
+   opt_get(g_opt, "http_lport")
+  );
+  http_con = mg_bind(&mgr, buf, http_ev_handler);
+  if (http_con == NULL) PERROR_GOTO(on_error_1);
 
   mg_set_protocol_http_websocket(http_con);
   http_server_opts.document_root = ".";
   http_server_opts.enable_directory_listing = "no";
 
-  dns_con = mg_bind(&mgr, dns_server_addr, dns_ev_handler);
-  if (dns_con == NULL) PERROR_GOTO(on_error_2);
+  snprintf
+  (
+   buf, sizeof(buf), "udp://%s:%s",
+   opt_get(g_opt, "dns_laddr"),
+   opt_get(g_opt, "dns_lport")
+  );
+  dns_con = mg_bind(&mgr, buf, dns_ev_handler);
+  if (dns_con == NULL) PERROR_GOTO(on_error_1);
 
   mg_set_protocol_dns(dns_con);
 
@@ -837,11 +850,10 @@ int main(int ac, char** av)
 
   err = 0;
 
- on_error_2:
-  mg_mgr_free(&mgr);
-  geoloc_fini(&g_geoloc);
  on_error_1:
+  mg_mgr_free(&mgr);
   pointdb_fini(&g_pointdb);
+  geoloc_fini(&g_geoloc);
  on_error_0:
   return err;
 }
