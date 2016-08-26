@@ -25,6 +25,8 @@ extern char** environ;
 
 typedef struct
 {
+#define GEOLOC_FLAG_DISABLED (1 << 0)
+  uint32_t flags;
   const char* post_path;
   const char* resp_path;
   const char* wget_path;
@@ -35,7 +37,7 @@ typedef struct
 
 geoloc_handle_t g_geoloc;
 
-static int geoloc_init(geoloc_handle_t* geoloc, const char* api_key)
+static int geoloc_init(geoloc_handle_t* geoloc, const char* key)
 {
 #define GEOLOC_URL \
   "https://www.googleapis.com/geolocation/v1/geolocate?" \
@@ -45,16 +47,25 @@ static int geoloc_init(geoloc_handle_t* geoloc, const char* api_key)
 #define GEOLOC_RESP_PATH "/tmp/geoloc.resp"
 #define GEOLOC_WGET_PATH "/usr/bin/wget"
 
-  const size_t key_len = strlen(api_key);
-  const size_t url_len = sizeof(GEOLOC_URL) - 1 + key_len;
+  size_t key_len;
+  size_t url_len;
+  struct stat st;
+
+  geoloc->flags = 0;
+
+  /* geoloc pdisabled */
+  if (key == NULL) goto on_error_0;
+  if (stat(GEOLOC_WGET_PATH, &st)) goto on_error_0;
 
   geoloc->post_path = GEOLOC_POST_PATH;
   geoloc->resp_path = GEOLOC_RESP_PATH;
 
+  key_len = strlen(key);
+  url_len = sizeof(GEOLOC_URL) - 1 + key_len;
   geoloc->url = malloc((url_len + 1) * sizeof(char));
   if (geoloc->url == NULL) PERROR_GOTO(on_error_0);
   memcpy(geoloc->url, GEOLOC_URL, sizeof(GEOLOC_URL) - 1);
-  strcpy(geoloc->url + sizeof(GEOLOC_URL) - 1, api_key);
+  strcpy(geoloc->url + sizeof(GEOLOC_URL) - 1, key);
 
   geoloc->wget_path = GEOLOC_WGET_PATH;
 
@@ -71,12 +82,14 @@ static int geoloc_init(geoloc_handle_t* geoloc, const char* api_key)
   return 0;
 
  on_error_0:
+  geoloc->flags |= GEOLOC_FLAG_DISABLED;
   return -1;
 }
 
 
 static void geoloc_fini(geoloc_handle_t* geoloc)
 {
+  if (geoloc->flags | GEOLOC_FLAG_DISABLED) return ;
   free(geoloc->url);
 }
 
@@ -92,6 +105,8 @@ static int geoloc_get_mac_coords
   size_t i;
   size_t j;
   int err = -1;
+
+  if (geoloc->flags | GEOLOC_FLAG_DISABLED) return -1;
 
   /* write macs in geoloc->post_data */
 
@@ -231,8 +246,6 @@ static void pointdb_flush(pointdb_handle_t* db, size_t did)
   db->heads[did] = NULL;
   db->tails[did] = NULL;
   db->counts[did] = 0;
-
-  /* TODO: free pointdb_apiurl */
 }
 
 
@@ -705,6 +718,85 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 
 /* command line */
 
+typedef struct
+{
+  const char* key;
+  const char* val;
+  const char* default_val;
+  const char* desc;
+} opt_keyval_t;
+
+#define OPT_KEYVAL(__key, __val, __desc) { __key, __val, __val, __desc }
+
+static opt_keyval_t g_opt[] =
+{
+  OPT_KEYVAL("dns_laddr", "0.0.0.0", "DNS server local address"),
+  OPT_KEYVAL("dns_lport", "53", "DNS server local port"),
+  OPT_KEYVAL("http_laddr", "0.0.0.0", "HTTP server local address"),
+  OPT_KEYVAL("http_lport", "80", "HTTP server local port"),
+  OPT_KEYVAL("geoloc_key", NULL, "Google geolocation API key"),
+  OPT_KEYVAL(NULL, NULL, NULL)
+};
+
+static void opt_print_help(const opt_keyval_t* opt)
+{
+  size_t i;
+
+  printf("command line usage:\n");
+  for (i = 0; opt[i].key != NULL; ++i)
+  {
+    const opt_keyval_t* const kv = opt + i;
+    printf("-%s: %s", kv->key, kv->desc);
+    if (kv->default_val != NULL) printf(" (default: %s)", kv->default_val);
+    printf("\n");
+  }
+}
+
+static opt_keyval_t* opt_find(opt_keyval_t* opt, const char* key)
+{
+  size_t i;
+
+  for (i = 0; opt[i].key != NULL; ++i)
+  {
+    opt_keyval_t* const kv = opt + i;
+    if (strcmp(key, kv->key) == 0) return kv;
+  }
+  
+  return NULL;
+}
+
+static const char* opt_get(opt_keyval_t* opt, const char* key)
+{
+  opt_keyval_t* const kv = opt_find(opt, key);
+  if (kv == NULL) return NULL;
+  return kv->val;
+}
+
+static int opt_init(opt_keyval_t* opt, int ac, char** av)
+{
+  --ac;
+  ++av;
+
+  if (ac %  1) PERROR_GOTO(on_error_0);
+
+  for (; ac; ac -= 2, av += 2)
+  {
+    const char* const k = av[0];
+    const char* const v = av[1];
+    opt_keyval_t* kv;
+    if (k[0] != '-') goto on_error_0;
+    kv = opt_find(opt, k + 1);
+    if (kv == NULL) PERROR_GOTO(on_error_0);
+    kv->val = v;
+  }
+
+  return 0;
+
+ on_error_0:
+  opt_print_help(opt);
+  return -1;
+}
+
 
 /* main */
 
@@ -715,7 +807,6 @@ static void on_sigint(int x)
   is_sigint = 1;
 }
 
-
 int main(int ac, char** av)
 {
   struct mg_mgr mgr;
@@ -723,6 +814,7 @@ int main(int ac, char** av)
   struct mg_connection* http_con;
   int err = -1;
 
+  if (opt_init(g_opt, ac, av)) PERROR_GOTO(on_error_0);
   if (pointdb_init(&g_pointdb)) PERROR_GOTO(on_error_0);
   if (geoloc_init(&g_geoloc, av[1])) PERROR_GOTO(on_error_1);
 
