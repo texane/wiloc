@@ -665,12 +665,15 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
     else if (mg_vcmp(&hm->uri, "/track") == 0)
     {
       /* did=<did>, the device id (required) */
-      /* ofmt={txt,gpx}, the device id (optional, default to txt) */
+      /* ofmt={csv,gpx}, the device id (optional, default to csv) */
 
       uint32_t did;
       double* coords;
       size_t ncoord;
       size_t i;
+      const char* ofmt_str;
+      const size_t ofmt_len;
+      unsigned int is_gpx;
 
       if (geoloc_is_disabled(&g_geoloc))
       {
@@ -684,6 +687,20 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 	return ;
       }
 
+      is_gpx = 0;
+      if (get_query_val_str(hm, "ofmt", &ofmt_str, &ofmt_len) == 0)
+      {
+	if (strncmp(ofmt_str, "gpx", ofmt_len) == 0)
+	{
+	  is_gpx = 1;
+	}
+	else if (strncmp(ofmt_str, "csv", ofmt_len) == 0)
+	{
+	  serve_failure_page(con, "invalid output format");
+	  return ;
+	}
+      }
+
       if (pointdb_get_coords(&g_pointdb, did, &coords, &ncoord))
       {
 	serve_failure_page(con, "getting coordinates");
@@ -694,14 +711,44 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 
       mg_printf_http_chunk(con, HTML_HEADER);
 
-      mg_printf_http_chunk(con, "<ul>");
+      mg_printf_http_chunk(con, "<pre>");
+
+      if (is_gpx == 1)
+      {
+	static const char* const gpx_html_header =
+	  "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+	  "<gpx xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\""
+	  "xmlns=\"http://www.topografix.com/GPX/1/0\""
+	  "xsi:schemaLocation=\"http://www.topografix.com/GPX/1/0/gpx.xsd\""
+	  "version=\"1.0\""
+	  "creator=\"gpx.py -- https://github.com/tkrajina/gpxpy\""
+	  "><trk><trkseg>";
+
+	mg_printf_http_chunk(con, "%s\n", gpx_html_header);
+      }
+
       for (i = 0; i != ncoord; ++i)
       {
 	const double lat = coords[i * 2 + 0];
 	const double lng = coords[i * 2 + 1];
-	mg_printf_http_chunk(con, "<li> %lf, %lf </li>", lat, lng);
+
+	if (is_gpx == 1)
+	{
+	  mg_printf_http_chunk
+	    (con, "<trkpt lat=\"%lf\" lon=\"%lf\"></trkpt>\n", lat, lng);
+	}
+	else /* csv */
+	{
+	  mg_printf_http_chunk(con, "%lf, %lf\n", lat, lng);
+	}
       }
-      mg_printf_http_chunk(con, "</ul>");
+
+      if (is_gpx == 1)
+      {
+	mg_printf_http_chunk(con, "</trkseg></trk></gpx>\n");
+      }
+
+      mg_printf_http_chunk(con, "</pre>");
 
       mg_printf_http_chunk(con, HTML_FOOTER);
 
