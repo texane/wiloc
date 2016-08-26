@@ -15,6 +15,12 @@ extern char** environ;
 
 
 
+/* debugging */
+
+#define PERROR() printf("[ERROR] %s %u\n", __FILE__, __LINE__)
+#define PERROR_GOTO(__l) do { PERROR(); goto __l; } while(0)
+
+
 /* google geolocation api */
 
 typedef struct
@@ -46,7 +52,7 @@ static int geoloc_init(geoloc_handle_t* geoloc, const char* api_key)
   geoloc->resp_path = GEOLOC_RESP_PATH;
 
   geoloc->url = malloc((url_len + 1) * sizeof(char));
-  if (geoloc->url == NULL) goto on_error_0;
+  if (geoloc->url == NULL) PERROR_GOTO(on_error_0);
   memcpy(geoloc->url, GEOLOC_URL, sizeof(GEOLOC_URL) - 1);
   strcpy(geoloc->url + sizeof(GEOLOC_URL) - 1, api_key);
 
@@ -94,7 +100,7 @@ static int geoloc_get_mac_coords
 #define GEOLOC_MEMCMP(__a, __b) memcmp(__a, __b, GEOLOC_STRLEN(__b))
 
   fd = open(geoloc->post_path, O_RDWR | O_TRUNC | O_CREAT, 0477);
-  if (fd == -1) goto on_error_0;
+  if (fd == -1) PERROR_GOTO(on_error_0);
 
   GEOLOC_WRITE(fd, "{\"wifiAccessPoints\":[");
   for (i = 0; i != nmac; ++i)
@@ -115,7 +121,7 @@ static int geoloc_get_mac_coords
 
   pid = fork();
 
-  if (pid == (pid_t)-1) goto on_error_1;
+  if (pid == (pid_t)-1) PERROR_GOTO(on_error_1);
 
   if (pid == 0)
   {
@@ -126,27 +132,27 @@ static int geoloc_get_mac_coords
 
   /* parent process */
 
-  if (waitpid(pid, &status, 0) == (pid_t)-1) goto on_error_2;
-  if (WIFEXITED(status) == 0) goto on_error_2;
-  if (WEXITSTATUS(status)) goto on_error_3;
+  if (waitpid(pid, &status, 0) == (pid_t)-1) PERROR_GOTO(on_error_2);
+  if (WIFEXITED(status) == 0) PERROR_GOTO(on_error_2);
+  if (WEXITSTATUS(status)) PERROR_GOTO(on_error_3);
 
   /* status ok, parse output file to get coords */
 
   fd = open(geoloc->resp_path, O_RDONLY);
-  if (fd == -1) goto on_error_3;
+  if (fd == -1) PERROR_GOTO(on_error_3);
 
   size = read(fd, buf, sizeof(buf) - 1);
-  if (size <= 0) goto on_error_3;
+  if (size <= 0) PERROR_GOTO(on_error_3);
   buf[size] = 0;
 
   for (i = 0; (size - i) > GEOLOC_STRLEN("\"lat\": "); ++i)
     if (GEOLOC_MEMCMP(buf + i, "\"lat\": ") == 0) break ;
-  if ((size - i) <= (GEOLOC_STRLEN("\"lat\": "))) goto on_error_3;
+  if ((size - i) <= (GEOLOC_STRLEN("\"lat\": "))) PERROR_GOTO(on_error_3);
   coords[0] = strtod(buf + i + GEOLOC_STRLEN("\"lat\": "), NULL);
 
   for (; (size - i) > GEOLOC_STRLEN("\"lng\": "); ++i)
     if (GEOLOC_MEMCMP(buf + i, "\"lng\": ") == 0) break ;
-  if ((size - i) <= (GEOLOC_STRLEN("\"lng\": "))) goto on_error_3;
+  if ((size - i) <= (GEOLOC_STRLEN("\"lng\": "))) PERROR_GOTO(on_error_3);
   coords[1] = strtod(buf + i + GEOLOC_STRLEN("\"lng\": "), NULL);
 
   err = 0;
@@ -186,10 +192,10 @@ typedef struct pointdb_entry
 
 typedef struct
 {
-#define WILOC_DID_MAX 0x100 /* not inclusive */
-  pointdb_entry_t* heads[WILOC_DID_MAX];
-  pointdb_entry_t* tails[WILOC_DID_MAX];
-  size_t counts[WILOC_DID_MAX];
+#define POINTDB_NKEY 0x100
+  pointdb_entry_t* heads[POINTDB_NKEY];
+  pointdb_entry_t* tails[POINTDB_NKEY];
+  size_t counts[POINTDB_NKEY];
 } pointdb_handle_t;
 
 static pointdb_handle_t g_pointdb;
@@ -199,7 +205,7 @@ static int pointdb_init(pointdb_handle_t* db)
 {
   size_t i;
 
-  for (i = 0; i != WILOC_DID_MAX; ++i)
+  for (i = 0; i != POINTDB_NKEY; ++i)
   {
     db->heads[i] = NULL;
     db->tails[i] = NULL;
@@ -233,13 +239,7 @@ static void pointdb_flush(pointdb_handle_t* db, size_t did)
 static void pointdb_fini(pointdb_handle_t* db)
 {
   size_t did;
-  for (did = 0; did != WILOC_DID_MAX; ++did) pointdb_flush(db, did);
-}
-
-
-static pointdb_entry_t* pointdb_find(pointdb_handle_t* db, size_t did)
-{
-  return db->heads[did];
+  for (did = 0; did != POINTDB_NKEY; ++did) pointdb_flush(db, did);
 }
 
 
@@ -602,7 +602,7 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
       mg_printf_http_chunk(con, HTML_HEADER);
 
       mg_printf_http_chunk(con, "<ul>");
-      for (did = 0; did != WILOC_DID_MAX; ++did)
+      for (did = 0; did != POINTDB_NKEY; ++did)
       {
 	char x[8];
 
@@ -708,6 +708,14 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 
 /* main */
 
+static volatile unsigned int is_sigint = 0;
+
+static void on_sigint(int x)
+{
+  is_sigint = 1;
+}
+
+
 int main(int ac, char** av)
 {
   struct mg_mgr mgr;
@@ -715,30 +723,25 @@ int main(int ac, char** av)
   struct mg_connection* http_con;
   int err = -1;
 
-  if (pointdb_init(&g_pointdb)) goto on_error_0;
-  if (geoloc_init(&g_geoloc, av[1])) goto on_error_1;
+  if (pointdb_init(&g_pointdb)) PERROR_GOTO(on_error_0);
+  if (geoloc_init(&g_geoloc, av[1])) PERROR_GOTO(on_error_1);
 
   mg_mgr_init(&mgr, NULL);
 
   http_con = mg_bind(&mgr, http_server_addr, http_ev_handler);
-  if (http_con == NULL)
-  {
-    printf("failed to create http server\n");
-    goto on_error_2;
-  }
+  if (http_con == NULL) PERROR_GOTO(on_error_2);
+
   mg_set_protocol_http_websocket(http_con);
   http_server_opts.document_root = ".";
   http_server_opts.enable_directory_listing = "no";
 
   dns_con = mg_bind(&mgr, dns_server_addr, dns_ev_handler);
-  if (dns_con == NULL)
-  {
-    printf("failed to create wiloc server\n");
-    goto on_error_2;
-  }
+  if (dns_con == NULL) PERROR_GOTO(on_error_2);
+
   mg_set_protocol_dns(dns_con);
 
-  for (;;) mg_mgr_poll(&mgr, 1000);
+  signal(SIGINT, on_sigint);
+  while (is_sigint == 0) mg_mgr_poll(&mgr, 1000);
 
   err = 0;
 
