@@ -731,18 +731,24 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 
       mg_printf_http_chunk(con, HTML_HEADER);
 
-      mg_printf_http_chunk(con, "<pre>");
+      mg_printf_http_chunk(con, "<pre><code>");
 
       if (is_gpx == 1)
       {
+#define HTML_LT "&lt;"
+#define HTML_GT "&gt;"
+
 	static const char* const gpx_html_header =
-	  "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-	  "<gpx xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\""
-	  "xmlns=\"http://www.topografix.com/GPX/1/0\""
-	  "xsi:schemaLocation=\"http://www.topografix.com/GPX/1/0/gpx.xsd\""
-	  "version=\"1.0\""
-	  "creator=\"gpx.py -- https://github.com/tkrajina/gpxpy\""
-	  "><trk><trkseg>";
+	  HTML_LT "?xml version=\"1.0\" encoding=\"UTF-8\"?" HTML_GT "\n"
+	  HTML_LT
+	  "gpx xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\""
+	  "xmlns=\"http://www.topografix.com/GPX/1/0\"" "\n"
+	  "xsi:schemaLocation=\"http://www.topografix.com/GPX/1/0/gpx.xsd\"\n"
+	  "version=\"1.0\"" "\n"
+	  "creator=\"gpx.py -- https://github.com/tkrajina/gpxpy\"\n"
+	  HTML_GT "\n"
+	  HTML_LT "trk" HTML_GT "\n"
+	  HTML_LT "trkseg" HTML_GT;
 
 	mg_printf_http_chunk(con, "%s\n", gpx_html_header);
       }
@@ -755,7 +761,13 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 	if (is_gpx == 1)
 	{
 	  mg_printf_http_chunk
-	    (con, "<trkpt lat=\"%lf\" lon=\"%lf\"></trkpt>\n", lat, lng);
+	  (
+	   con,
+	   HTML_LT "trkpt lat=\"%lf\" lon=\"%lf\"" HTML_GT
+	   HTML_LT "/trkpt" HTML_GT
+	   "\n",
+	   lat, lng
+	  );
 	}
 	else /* csv */
 	{
@@ -765,10 +777,17 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 
       if (is_gpx == 1)
       {
-	mg_printf_http_chunk(con, "</trkseg></trk></gpx>\n");
+	mg_printf_http_chunk
+	(
+	 con,
+	 HTML_LT "/trkseg" HTML_GT
+	 HTML_LT "/trk" HTML_GT
+	 HTML_LT "/gpx" HTML_GT
+	 "\n"
+	);
       }
 
-      mg_printf_http_chunk(con, "</pre>");
+      mg_printf_http_chunk(con, "</code></pre>");
 
       mg_printf_http_chunk(con, HTML_FOOTER);
 
