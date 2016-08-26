@@ -572,8 +572,11 @@ static int get_query_val_str
     if (memcmp(qs->p + off, key, key_len) == 0)
     {
       /* skip key equals */
-      i += key_len + 1;
-      break ;
+      if (qs->p[off + key_len] == '=')
+      {
+	i = off + key_len + 1;
+	break ;
+      }
     }
   }
 
@@ -711,7 +714,7 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 	{
 	  is_gpx = 1;
 	}
-	else if (strncmp(ofmt_str, "csv", ofmt_len) == 0)
+	else if (strncmp(ofmt_str, "csv", ofmt_len))
 	{
 	  serve_failure_page(con, "invalid output format");
 	  return ;
