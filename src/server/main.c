@@ -505,7 +505,7 @@ static void dns_ev_handler(struct mg_connection* con, int ev, void* p)
 
 static struct mg_serve_http_opts http_server_opts;
 
-#define HTML_HEADER "<html><body>"
+#define HTML_HEADER "<!DOCTYPE html><html><body>"
 #define HTML_FOOTER "</body></html>"
 #define HTML_GOTO_MAIN "<a href=\"/\"> goto main page </a>"
 
@@ -670,7 +670,7 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 	 "<tr>"
 	 " <td> %s </td>"
 	 " <td> %zu </td>"
-	 " <td> <a href=\"/track?did=%s&ofmt=csv\"> track-csv </a> </td>"
+	 " <td> <a href=\"/track?did=%s&ofmt=html\"> track-html </a> </td>"
 	 " <td> <a href=\"/track?did=%s&ofmt=gpx\"> track-gpx </a> </td>"
 	 " <td> <a href=\"/flush?did=%s\"> flush </a> </td>"
 	 " <td> <a href=\"/dump?did=%s\"> dump </a> </td>"
@@ -695,7 +695,7 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
     else if (mg_vcmp(&hm->uri, "/track") == 0)
     {
       /* did=<did>, the device id (required) */
-      /* ofmt={csv,gpx}, the device id (optional, default to csv) */
+      /* ofmt={html,gpx}, the device id (optional, default to html) */
 
       uint32_t did;
       double* coords;
@@ -724,7 +724,7 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 	{
 	  is_gpx = 1;
 	}
-	else if (strncmp(ofmt_str, "csv", ofmt_len))
+	else if (strncmp(ofmt_str, "html", ofmt_len))
 	{
 	  serve_failure_page(con, "invalid output format");
 	  return ;
@@ -771,7 +771,7 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 	  mg_printf_http_chunk
 	    (con, "<trkpt lat=\"%lf\" lon=\"%lf\"></trkpt>\n", lat, lng);
 	}
-	else /* csv */
+	else /* html */
 	{
 	  mg_printf_http_chunk(con, "%lf, %lf\n", lat, lng);
 	}
