@@ -619,42 +619,53 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
     serve_list_page:
     {
       size_t did;
-      unsigned int has_one;
+      size_t n;
 
       init_response(con);
 
       mg_printf_http_chunk(con, HTML_HEADER);
 
-      mg_printf_http_chunk(con, "<ul>");
+      mg_printf_http_chunk
+      (
+       con,
+       "<table style=\"border: 0px solid;\">"
+       "<tr>"
+       " <th> device </th>"
+       " <th> npoint </th>"
+       " <th colspan=\"4\"> operations </th>"
+       "</tr>"
+      );
 
-      has_one = 0;
+      n = 0;
       for (did = 0; did != POINTDB_NKEY; ++did)
       {
 	char x[8];
 
 	if (g_pointdb.counts[did] == 0) continue ;
 
-	has_one = 1;
-
 	sprintf(x, "0x%02x", (uint8_t)did);
-	mg_printf_http_chunk(con, "<li>");
-	mg_printf_http_chunk(con, "%s", x);
-	mg_printf_http_chunk(con, "&nbsp;");
-	mg_printf_http_chunk(con, "(%zu points)", g_pointdb.counts[did]);
-	mg_printf_http_chunk(con, "&nbsp;");
-	mg_printf_http_chunk
-	  (con, "<a href=\"/track?did=%s&ofmt=csv\">track-csv</a>", x);
-	mg_printf_http_chunk
-	  (con, "<a href=\"/track?did=%s&ofmt=gpx\">track-gpx</a>", x);
-	mg_printf_http_chunk(con, "&nbsp;");
-	mg_printf_http_chunk(con, "<a href=\"/flush?did=%s\">flush</a>", x);
-	mg_printf_http_chunk(con, "&nbsp;");
-	mg_printf_http_chunk(con, "<a href=\"/dump?did=%s\">dump</a>", x);
-	mg_printf_http_chunk(con, "</li>");
-      }
-      mg_printf_http_chunk(con, "</ul>");
 
-      if (has_one == 0)
+	mg_printf_http_chunk
+	(
+	 con,
+	 "<tr align=\"center\" bgcolor=\"%s\">"
+	 " <td> %s </td>"
+	 " <td> %zu </td>"
+	 " <td> <a href=\"/track?did=%s&ofmt=csv\"> track-csv </a> </td>"
+	 " <td> <a href=\"/track?did=%s&ofmt=gpx\"> track-gpx </a> </td>"
+	 " <td> <a href=\"/flush?did=%s\"> flush </a> </td>"
+	 " <td> <a href=\"/dump?did=%s\"> dump </a> </td>"
+	 "</tr>",
+	 ((n % 2) == 0) ? "#eeeeee" : "#ffffff",
+	 x, g_pointdb.counts[did], x, x, x, x
+	);
+
+	++n;
+      }
+
+      mg_printf_http_chunk(con, "</table>");
+
+      if (n == 0)
       {
 	mg_printf_http_chunk(con, "<h2> no device points found </h2>");
       }

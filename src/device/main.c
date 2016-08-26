@@ -544,6 +544,7 @@ typedef struct
 {
   const char* daddr;
   uint16_t dport;
+  uint8_t did;
 } cmd_info_t;
 
 static int get_cmd_info(cmd_info_t* ci, size_t ac, const char** av)
@@ -554,6 +555,7 @@ static int get_cmd_info(cmd_info_t* ci, size_t ac, const char** av)
 
   ci->daddr = "127.0.0.1";
   ci->dport = DNS_SERVER_PORT;
+  ci->did = 0x2a;
 
   for (i = 0; i != ac; i += 2)
   {
@@ -567,6 +569,10 @@ static int get_cmd_info(cmd_info_t* ci, size_t ac, const char** av)
     else if (strcmp(k, "-dport") == 0)
     {
       ci->dport = (uint16_t)strtoul(v, NULL, 10);
+    }
+    else if (strcmp(k, "-did") == 0)
+    {
+      ci->did = (uint8_t)strtoul(v, NULL, 16);
     }
   }
 
@@ -604,7 +610,7 @@ int main(int ac, char** av)
   wilm = (wiloc_msg_t*)(buf + sizeof(dns_header_t));
   wilm->vers = WILOC_MSG_VERS;
   wilm->flags = WILOC_MSG_FLAG_WIFI | WILOC_MSG_FLAG_TICK;
-  wilm->did = 0x2a;
+  wilm->did = ci.did;
   wilm->count = 16;
 
   macs = (uint8_t*)wilm + sizeof(wiloc_msg_t);
