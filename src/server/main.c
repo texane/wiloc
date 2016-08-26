@@ -628,7 +628,12 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
       mg_printf_http_chunk
       (
        con,
-       "<table cellspacing=\"5\">"
+       "<style>"
+       "table { border-collapse: collapse; }"
+       "th, td { text-align: center; padding: 8px; }"
+       "tr:nth-child(even){background-color: #eaeaea}"
+       "</style>"
+       "<table>"
        "<tr>"
        " <th> device </th>"
        " <th> npoint </th>"
@@ -639,20 +644,17 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
       n = 0;
       for (did = 0; did != POINTDB_NKEY; ++did)
       {
-	const char* color;
 	char x[8];
 
 	if (g_pointdb.counts[did] == 0) continue ;
-
-	if ((++n) % 2) color = "#e0e0e0";
-	else color = "#ffffff";
+	++n;
 
 	sprintf(x, "0x%02x", (uint8_t)did);
 
 	mg_printf_http_chunk
 	(
 	 con,
-	 "<tr align=\"center\" bgcolor=\"%s\">"
+	 "<tr>"
 	 " <td> %s </td>"
 	 " <td> %zu </td>"
 	 " <td> <a href=\"/track?did=%s&ofmt=csv\"> track-csv </a> </td>"
@@ -660,7 +662,7 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 	 " <td> <a href=\"/flush?did=%s\"> flush </a> </td>"
 	 " <td> <a href=\"/dump?did=%s\"> dump </a> </td>"
 	 "</tr>",
-	 color, x, g_pointdb.counts[did], x, x, x, x
+	 x, g_pointdb.counts[did], x, x, x, x
 	);
       }
 
