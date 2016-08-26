@@ -642,7 +642,10 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 	mg_printf_http_chunk(con, "&nbsp;");
 	mg_printf_http_chunk(con, "(%zu points)", g_pointdb.counts[did]);
 	mg_printf_http_chunk(con, "&nbsp;");
-	mg_printf_http_chunk(con, "<a href=\"/track?did=%s\">track</a>", x);
+	mg_printf_http_chunk
+	  (con, "<a href=\"/track?did=%s&ofmt=csv\">track-csv</a>", x);
+	mg_printf_http_chunk
+	  (con, "<a href=\"/track?did=%s&ofmt=gpx\">track-gpx</a>", x);
 	mg_printf_http_chunk(con, "&nbsp;");
 	mg_printf_http_chunk(con, "<a href=\"/flush?did=%s\">flush</a>", x);
 	mg_printf_http_chunk(con, "&nbsp;");
@@ -672,7 +675,7 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
       size_t ncoord;
       size_t i;
       const char* ofmt_str;
-      const size_t ofmt_len;
+      size_t ofmt_len;
       unsigned int is_gpx;
 
       if (geoloc_is_disabled(&g_geoloc))
