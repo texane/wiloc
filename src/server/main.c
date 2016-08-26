@@ -606,17 +606,22 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
     serve_list_page:
     {
       size_t did;
+      unsigned int has_one;
 
       init_response(con);
 
       mg_printf_http_chunk(con, HTML_HEADER);
 
       mg_printf_http_chunk(con, "<ul>");
+
+      has_one = 0;
       for (did = 0; did != POINTDB_NKEY; ++did)
       {
 	char x[8];
 
 	if (g_pointdb.counts[did] == 0) continue ;
+
+	has_one = 1;
 
 	sprintf(x, "0x%02x", (uint8_t)did);
 	mg_printf_http_chunk(con, "<li>");
@@ -632,6 +637,11 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 	mg_printf_http_chunk(con, "</li>");
       }
       mg_printf_http_chunk(con, "</ul>");
+
+      if (has_one == 0)
+      {
+	mg_printf_http_chunk(con, "<h2> no device points found </h2>");
+      }
 
       mg_printf_http_chunk(con, HTML_FOOTER);
 
