@@ -751,13 +751,7 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 	return ;
       }
 
-      if (is_gpx == 0)
-      {
-	init_html_response(con);
-	mg_printf_http_chunk(con, HTML_HEADER);
-	mg_printf_http_chunk(con, "<pre><code>");
-      }
-      else
+      if (is_gpx == 1)
       {
 	static const char* const gpx_header =
 	  "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
@@ -775,6 +769,12 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 	snprintf(filename, sizeof(filename), "0x%02x.gpx", (uint8_t)did);
 	init_attachment_response(con, filename);
 	mg_printf_http_chunk(con, gpx_header);
+      }
+      else
+      {
+	init_html_response(con);
+	mg_printf_http_chunk(con, HTML_HEADER);
+	mg_printf_http_chunk(con, "<pre><code>");
       }
 
       for (i = 0; i != ncoord; ++i)
@@ -797,8 +797,7 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
       {
 	mg_printf_http_chunk(con, "</trkseg></trk></gpx>\n");
       }
-
-      if (is_gpx == 0)
+      else
       {
 	mg_printf_http_chunk(con, "</code></pre>");
 	mg_printf_http_chunk(con, HTML_FOOTER);
