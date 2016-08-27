@@ -22,6 +22,7 @@ typedef struct
   /* coordinate encoding */
   /* 9 bits for integer part (0 to 360 degrees) */
   /* 15 bits for decimal part (.00003 degrees resolution, 3m) */
+  /* convenient as it results in the same size as a mac address */
 #define WILOC_MSG_FLAG_TICK (1 << 0)
 #define WILOC_MSG_FLAG_COORDS (1 << 1)
   uint8_t flags;
