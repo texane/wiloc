@@ -509,18 +509,32 @@ static struct mg_serve_http_opts http_server_opts;
 #define HTML_FOOTER "</body></html>"
 #define HTML_GOTO_MAIN "<a href=\"/\"> goto main page </a>"
 
-static void init_response(struct mg_connection* con, const char* content_type)
+static void init_common_response(struct mg_connection* con)
 {
-  if (content_type == NULL) content_type = "text/html; charset=utf-8";
-
   mg_printf
   (
    con,
    "HTTP/1.1 200 OK\r\n"
    "Transfer-Encoding: chunked\r\n"
-   "Content-Type: %s\r\n"
+  );
+}
+
+static void init_html_response(struct mg_connection* con)
+{
+  init_common_response(con);
+  mg_printf(con, "\r\n");
+}
+
+static void init_attachment_response
+(struct mg_connection* con, const char* filename)
+{
+  init_common_response(con);
+  mg_printf
+  (
+   con,
+   "Content-Disposition: Attachment; filename=%s\r\n"
    "\r\n",
-   content_type
+   filename
   );
 }
 
@@ -532,7 +546,7 @@ static void fini_response(struct mg_connection* con)
 
 static void serve_one_page(struct mg_connection* con, const char* page)
 {
-  init_response(con, NULL);
+  init_html_response(con);
   mg_printf_http_chunk(con, "%s", page);
   fini_response(con);
 }
@@ -556,7 +570,7 @@ static void serve_failure_page(struct mg_connection* con, const char* err)
     HTML_GOTO_MAIN
     HTML_FOOTER;
 
-  init_response(con, NULL);
+  init_html_response(con);
   mg_printf_http_chunk(con, html, (err == NULL) ? "unspecified error" : err);
   fini_response(con);
 }
@@ -634,7 +648,7 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
       size_t did;
       size_t n;
 
-      init_response(con, NULL);
+      init_html_response(con);
 
       mg_printf_http_chunk(con, HTML_HEADER);
 
@@ -739,13 +753,13 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 
       if (is_gpx == 0)
       {
-	init_response(con, NULL);
+	init_html_response(con);
 	mg_printf_http_chunk(con, HTML_HEADER);
 	mg_printf_http_chunk(con, "<pre><code>");
       }
       else
       {
-	static const char* const gpx_html_header =
+	static const char* const gpx_header =
 	  "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
 	  "<gpx"
 	  " xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\""
@@ -757,8 +771,10 @@ static void http_ev_handler(struct mg_connection* con, int ev, void* p)
 	  "<trk>"
 	  "<trkseg>\n";
 
-	init_response(con, "application/xml");
-	mg_printf_http_chunk(con, gpx_html_header);
+	char filename[16];
+	snprintf(filename, sizeof(filename), "0x%02x.gpx", (uint8_t)did);
+	init_attachment_response(con, filename);
+	mg_printf_http_chunk(con, gpx_header);
       }
 
       for (i = 0; i != ncoord; ++i)
