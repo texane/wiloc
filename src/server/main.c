@@ -476,15 +476,14 @@ static void dns_ev_handler(struct mg_connection* con, int ev, void* p)
 	if (decode_wiloc_msg(mbuf, msize)) break ;
 
 	if (wilm->vers != WILOC_MSG_VERS) break ;
-	if ((wilm->flags & WILOC_MSG_FLAG_WIFI) == 0) break ;
 
-	if (((size_t)wilm->count * 6) > (msize - sizeof(wiloc_msg_t))) break ;
+	if (((size_t)wilm->mac_count * 6) > (msize - sizeof(wiloc_msg_t))) break ;
 
 	pe = pointdb_add_wifi
 	(
 	 &g_pointdb,
 	 (size_t)wilm->did, mbuf + sizeof(wiloc_msg_t),
-	 (size_t)wilm->count
+	 (size_t)wilm->mac_count
 	);
 
 	if (pe == NULL) break ;

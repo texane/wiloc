@@ -441,17 +441,17 @@ static int send_macs
 
   wilm = (wiloc_msg_t*)(buf + sizeof(dns_header_t));
   wilm->vers = WILOC_MSG_VERS;
-  wilm->flags = WILOC_MSG_FLAG_WIFI | WILOC_MSG_FLAG_TICK;
+  wilm->flags = WILOC_MSG_FLAG_TICK;
   wilm->did = 0x2a;
-  wilm->count = (uint8_t)nmac;
+  wilm->mac_count = (uint8_t)nmac;
 
-  for (i = 0; i != (wilm->count * 6); ++i)
+  for (i = 0; i != (wilm->mac_count * 6); ++i)
   {
     ((uint8_t*)wilm)[SMALL_SIZEOF(wiloc_msg_t) + i] = macs[i];
   }
 
   size = encode_wiloc_msg
-    ((uint8_t*)wilm, SMALL_SIZEOF(wiloc_msg_t) + wilm->count * 6);
+    ((uint8_t*)wilm, SMALL_SIZEOF(wiloc_msg_t) + wilm->mac_count * 6);
 
   dnsq = (dns_query_t*)(buf + sizeof(dns_header_t) + size);
   dnsq->qtype = htons(DNS_RR_TYPE_A);
@@ -609,14 +609,14 @@ int main(int ac, char** av)
 
   wilm = (wiloc_msg_t*)(buf + sizeof(dns_header_t));
   wilm->vers = WILOC_MSG_VERS;
-  wilm->flags = WILOC_MSG_FLAG_WIFI | WILOC_MSG_FLAG_TICK;
+  wilm->flags = WILOC_MSG_FLAG_TICK;
   wilm->did = ci.did;
-  wilm->count = 16;
+  wilm->mac_count = 16;
 
   macs = (uint8_t*)wilm + sizeof(wiloc_msg_t);
-  for (i = 0; i != (wilm->count * 6); ++i) macs[i] = i;
+  for (i = 0; i != (wilm->mac_count * 6); ++i) macs[i] = i;
   size = encode_wiloc_msg
-    ((uint8_t*)wilm, SMALL_SIZEOF(wiloc_msg_t) + wilm->count * 6);
+    ((uint8_t*)wilm, SMALL_SIZEOF(wiloc_msg_t) + wilm->mac_count * 6);
 
   dnsq = (dns_query_t*)(buf + sizeof(dns_header_t) + size);
   dnsq->qtype = htons(DNS_RR_TYPE_A);

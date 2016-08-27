@@ -17,9 +17,10 @@ typedef struct
   /* TICK: used to increment the server time */
   /* all the position records received in the */
   /* same time must be merged during the lookup */
+  /* COORDS: uint32_t coords[2] is present in data */
+  /* if present, always appear first in data */
 #define WILOC_MSG_FLAG_TICK (1 << 0)
-#define WILOC_MSG_FLAG_WIFI (1 << 3)
-#define WILOC_MSG_FLAG_GPS (1 << 4)
+#define WILOC_MSG_FLAG_COORDS (1 << 1)
   uint8_t flags;
 
   /* device identifier */
@@ -41,26 +42,14 @@ typedef struct
   uint16_t time;
 #endif /* use tick instead */
 
-  /* position info count */
-  uint8_t count;
+  /* mac address count */
+  uint8_t mac_count;
 
   /* data start here */
-  /* uint8_t data[]; */
+  /* uint32_t coords[2]; */
+  /* uint8_t macs[mac_count]; */
 
 } __attribute__((packed)) wiloc_msg_t;
-
-
-typedef struct
-{
-  /* TODO: coordinates */
-} wiloc_msg_gps_t;
-
-
-typedef struct
-{
-  uint8_t mac[6];
-} wiloc_msg_wifi_t;
-
 
 
 #endif /* WILOC_COMMON_H_INCLUDED */

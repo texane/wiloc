@@ -1,3 +1,8 @@
+[ TODO ]
+modify wiloc_msg_t such that GPS and WIFI coordinates are not
+exclusive.
+
+
 [ on dns tunnelling ]
 in practice, active portals (FreeWifi) block DNS request if they
 do not target the DNS server IP passed during the DHCP response.
