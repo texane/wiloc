@@ -191,6 +191,8 @@ static int geoloc_get_mac_coords
 
 typedef struct pointdb_entry
 {
+  struct pointdb_entry* next;
+
 #define POINTDB_FLAG_HAS_COORDS (1 << 0)
 #define POINTDB_FLAG_HAS_MACS (1 << 1)
 #define POINTDB_FLAG_COORDS_FAILED (1 << 2)
@@ -198,14 +200,12 @@ typedef struct pointdb_entry
 
   unsigned long time;
 
-  /* mac addresses */
-  uint8_t* macs;
-  size_t nmac;
-
   /* lag, lng */
   double coords[2];
 
-  struct pointdb_entry* next;
+  /* mac addresses */
+  size_t nmac;
+  uint8_t macs[1];
 
 } pointdb_entry_t;
 
@@ -306,28 +306,21 @@ static int pointdb_get_coords
 }
 
 
-static pointdb_entry_t* pointdb_add_wifi
-(pointdb_handle_t* db, size_t did, const uint8_t* macs, size_t nmac)
+static pointdb_entry_t* pointdb_add
+(
+ pointdb_handle_t* db,
+ size_t did,
+ const uint8_t* macs, size_t nmac,
+ const uint8_t* coords
+)
 {
+  /* TODO: coords is currently ignored */
+
   pointdb_entry_t* pe;
   const size_t mac_size = nmac * 6;
 
-  pe = malloc(sizeof(pointdb_entry_t));
+  pe = malloc(sizeof(pointdb_entry_t) + mac_size);
   if (pe == NULL) return NULL;
-
-  pe->flags = POINTDB_FLAG_HAS_MACS;
-
-  pe->time = 0;
-
-  pe->nmac = nmac;
-  pe->macs = malloc(mac_size * sizeof(uint8_t));
-  if (pe->macs == NULL)
-  {
-    free(pe);
-    return NULL;
-  }
-
-  memcpy(pe->macs, macs, mac_size);
 
   pe->next = NULL;
 
@@ -343,6 +336,11 @@ static pointdb_entry_t* pointdb_add_wifi
   }
 
   ++db->counts[did];
+
+  pe->flags = POINTDB_FLAG_HAS_MACS;
+  pe->time = 0;
+  pe->nmac = nmac;
+  memcpy(pe->macs, macs, mac_size);
 
   return pe;
 }
@@ -465,8 +463,11 @@ static void dns_ev_handler(struct mg_connection* con, int ev, void* p)
       {
 	const struct mg_dns_resource_record* const rr = &dnsm->questions[i];
 	uint8_t mbuf[256];
-	size_t msize;
 	const wiloc_msg_t* const wilm = (const wiloc_msg_t*)mbuf;
+	size_t msize;
+	size_t dsize;
+	const uint8_t* macs;
+	const uint8_t* coords;
 	pointdb_entry_t* pe;
 
 	msize = rr->name.len;
@@ -477,13 +478,27 @@ static void dns_ev_handler(struct mg_connection* con, int ev, void* p)
 
 	if (wilm->vers != WILOC_MSG_VERS) break ;
 
-	if (((size_t)wilm->mac_count * 6) > (msize - sizeof(wiloc_msg_t))) break ;
+	macs = mbuf + sizeof(wiloc_msg_t);
+	dsize = (size_t)wilm->mac_count * 6;
+	if (wilm->flags & WILOC_MSG_FLAG_COORDS)
+	{
+	  /* coords start after macs */
+	  coords = macs + dsize;
+	  dsize += 6;
+	}
+	else
+	{
+	  coords = NULL;
+	}
 
-	pe = pointdb_add_wifi
+	if (dsize > (msize - sizeof(wiloc_msg_t))) break ;
+
+	pe = pointdb_add
 	(
 	 &g_pointdb,
-	 (size_t)wilm->did, mbuf + sizeof(wiloc_msg_t),
-	 (size_t)wilm->mac_count
+	 (size_t)wilm->did,
+	 macs, (size_t)wilm->mac_count,
+	 coords
 	);
 
 	if (pe == NULL) break ;
