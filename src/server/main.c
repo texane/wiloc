@@ -455,15 +455,18 @@ static int decode_wiloc_msg(uint8_t* mbuf, size_t msize)
 
 static void decode_coords(double* coords, const uint8_t* buf)
 {
+  static const double precision = WILOC_COORD_EXPONENT;
   size_t i;
 
-  for (i = 0; i != 2; ++i, buf += 3)
+  for (i = 0; i != 2; ++i, buf += 4)
   {
-    /* x the integer part, y the decimal part */
-    uint16_t x = ((uint16_t)buf[0] << 1) | ((uint16_t)buf[1] >> 7);
-    const uint16_t y = (((uint16_t)buf[1] & 0x7f) << 8) | ((uint16_t)buf[2]);
-    if (x & (1 << 8)) x |= 0xff00;
-    coords[i] = ((double)(int16_t)x) + (double)y / (double)(1 << 15);
+    const uint32_t x =
+      ((uint32_t)buf[0] << 24) |
+      ((uint32_t)buf[1] << 16) |
+      ((uint32_t)buf[2] << 8) |
+      ((uint32_t)buf[3] << 0);
+
+    coords[i] = (double)(int32_t)x / precision;
   }
 }
 
@@ -502,7 +505,7 @@ static void dns_ev_handler(struct mg_connection* con, int ev, void* p)
 	{
 	  decode_coords(coords, macs + dsize);
 	  coordp = coords;
-	  dsize += 6;
+	  dsize += 2 * sizeof(uint32_t);
 	}
 	else
 	{

@@ -20,15 +20,15 @@ typedef uint8_t small_size_t;
 
 static void encode_coord(uint8_t* buf, const char* coord)
 {
-  uint16_t x;
-  uint32_t y;
-  uint32_t m;
-  uint8_t i;
+  static const small_size_t precision = WILOC_COORD_PRECISION;
+  uint32_t x;
+  small_size_t i;
+  uint8_t isn;
 
-  i = 0;
+  isn = 0;
   if (*coord == '-')
   {
-    i = 1;
+    isn = 1;
     ++coord;
   }
   else if (*coord == '+')
@@ -40,29 +40,24 @@ static void encode_coord(uint8_t* buf, const char* coord)
 
   x = 0;
   for (; *coord && (*coord != '.'); ++coord)
-  {
-    x *= 10;
-    x += (uint16_t)(*coord - '0');
-  }
+    x = x * 10 + (uint32_t)(*coord - '0');
 
-  if (i) x *= -1;
-
-  y = 0;
+  i = 0;
   if ((coord[0] == 0) || (coord[1] == 0)) goto skip_decimals;
   ++coord;
-  m = (uint32_t)1e4;
-  for (i = 0; *coord && (i != 5); ++i, ++coord)
-  {
-    y += (uint32_t)(*coord - '0') * m;
-    m /= 10;
-  }
 
-  y = (y * (uint32_t)(1 << 15)) / (uint32_t)1e5;
+  /* i the maximum precision */
+  for (; *coord && (i != precision); ++i, ++coord)
+    x = x * 10 + (uint32_t)(*coord - '0');
 
  skip_decimals:
-  buf[0] = (uint8_t)(x >> 1);
-  buf[1] = (uint8_t)((x << 7) | ((y >> 8) & 0x7f));
-  buf[2] = (uint8_t)y;
+  for (; i != precision; ++i) x *= 10;
+  if (isn) x *= -1;
+
+  buf[0] = (uint8_t)(x >> 24);
+  buf[1] = (uint8_t)(x >> 16);
+  buf[2] = (uint8_t)(x >> 8);
+  buf[3] = (uint8_t)(x >> 0);
 }
 
 
@@ -680,10 +675,10 @@ int main(int ac, char** av)
   if (ci.coords[0] != NULL)
   {
     uint8_t* const coords = macs + size;
-    size += 6;
+    size += 2 * sizeof(uint32_t);
     wilm->flags |= WILOC_MSG_FLAG_COORDS;
-    encode_coord(coords + 0, ci.coords[0]);
-    encode_coord(coords + 3, ci.coords[1]);
+    encode_coord(coords + 0 * sizeof(uint32_t), ci.coords[0]);
+    encode_coord(coords + 1 * sizeof(uint32_t), ci.coords[1]);
   }
 
   size = encode_wiloc_msg
