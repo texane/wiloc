@@ -25,15 +25,15 @@ based gelocation services to maintain their databases.
 ## Usage
 
 server command line:
--dns_laddr: DNS server local address (default: 0.0.0.0)
--dns_lport: DNS server local port (default: 53)
--http_laddr: HTTP server local address (default: 0.0.0.0)
--http_lport: HTTP server local port (default: 80)
--geoloc_key: Google geolocation API key
+- -dns_laddr: DNS server local address (default: 0.0.0.0)
+- -dns_lport: DNS server local port (default: 53)
+- -http_laddr: HTTP server local address (default: 0.0.0.0)
+- -http_lport: HTTP server local port (default: 80)
+- -geoloc_key: Google geolocation API key
 
 
 ## Source code
 
-src/server: server specific code
-src/device: device specific code
-src/common/wiloc.h: protocol
+- src/server: server specific code
+- src/device: device specific code
+- src/common/wiloc.h: protocol
