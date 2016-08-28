@@ -194,8 +194,7 @@ typedef struct pointdb_entry
   struct pointdb_entry* next;
 
 #define POINTDB_FLAG_HAS_COORDS (1 << 0)
-#define POINTDB_FLAG_HAS_MACS (1 << 1)
-#define POINTDB_FLAG_COORDS_FAILED (1 << 2)
+#define POINTDB_FLAG_COORDS_FAILED (1 << 1)
   uint32_t flags;
 
   unsigned long time;
@@ -244,7 +243,6 @@ static void pointdb_flush(pointdb_handle_t* db, size_t did)
   {
     pointdb_entry_t* const tmp = pe;
     pe = pe->next;
-    if (tmp->flags & POINTDB_FLAG_HAS_MACS) free(tmp->macs);
     free(tmp);
   }
 
@@ -283,7 +281,7 @@ static int pointdb_get_coords
 
     if ((pe->flags & POINTDB_FLAG_HAS_COORDS) == 0)
     {
-      if ((pe->flags & POINTDB_FLAG_HAS_MACS) == 0) continue ;
+      if (pe->nmac == 0) continue ;
 
       if (geoloc_get_mac_coords(&g_geoloc, pe->coords, pe->macs, pe->nmac))
       {
@@ -337,7 +335,7 @@ static pointdb_entry_t* pointdb_add
 
   ++db->counts[did];
 
-  pe->flags = POINTDB_FLAG_HAS_MACS;
+  pe->flags = 0;
   pe->time = 0;
   pe->nmac = nmac;
   memcpy(pe->macs, macs, mac_size);
