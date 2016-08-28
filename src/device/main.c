@@ -18,6 +18,54 @@ typedef uint8_t small_size_t;
 #define SMALL_SIZEOF(__x) ((small_size_t)sizeof(__x))
 
 
+static void encode_coord(uint8_t* buf, const char* coord)
+{
+  uint16_t x;
+  uint32_t y;
+  uint32_t m;
+  uint8_t i;
+
+  i = 0;
+  if (*coord == '-')
+  {
+    i = 1;
+    ++coord;
+  }
+  else if (*coord == '+')
+  {
+    ++coord;
+  }
+
+  for (; *coord == '0'; ++coord) ;
+
+  x = 0;
+  for (; *coord && (*coord != '.'); ++coord)
+  {
+    x *= 10;
+    x += (uint16_t)(*coord - '0');
+  }
+
+  if (i) x *= -1;
+
+  y = 0;
+  if ((coord[0] == 0) || (coord[1] == 0)) goto skip_decimals;
+  ++coord;
+  m = (uint32_t)1e4;
+  for (i = 0; *coord && (i != 5); ++i, ++coord)
+  {
+    y += (uint32_t)(*coord - '0') * m;
+    m /= 10;
+  }
+
+  y = (y * (uint32_t)(1 << 15)) / (uint32_t)1e5;
+
+ skip_decimals:
+  buf[0] = (uint8_t)(x >> 1);
+  buf[1] = (uint8_t)((x << 7) | ((y >> 8) & 0x7f));
+  buf[2] = (uint8_t)y;
+}
+
+
 static small_size_t encode_base64
 (
  const uint8_t* sbuf, small_size_t slen,
@@ -545,6 +593,7 @@ typedef struct
   const char* daddr;
   uint16_t dport;
   uint8_t did;
+  const char* coords[2];
 } cmd_info_t;
 
 static int get_cmd_info(cmd_info_t* ci, size_t ac, const char** av)
@@ -556,6 +605,8 @@ static int get_cmd_info(cmd_info_t* ci, size_t ac, const char** av)
   ci->daddr = "127.0.0.1";
   ci->dport = DNS_SERVER_PORT;
   ci->did = 0x2a;
+  ci->coords[0] = NULL;
+  ci->coords[1] = NULL;
 
   for (i = 0; i != ac; i += 2)
   {
@@ -573,6 +624,15 @@ static int get_cmd_info(cmd_info_t* ci, size_t ac, const char** av)
     else if (strcmp(k, "-did") == 0)
     {
       ci->did = (uint8_t)strtoul(v, NULL, 16);
+    }
+    else if (strcmp(k, "-coords") == 0)
+    {
+      size_t j;
+      ci->coords[0] = v;
+      for (j = 0; v[j] && (v[j] != ','); ++j) ;
+      if (v[j] == ',') ci->coords[1] = v + j + 1;
+      else ci->coords[1] = "0.0";
+      ((char*)v)[j] = 0;
     }
   }
 
@@ -613,10 +673,21 @@ int main(int ac, char** av)
   wilm->did = ci.did;
   wilm->mac_count = 16;
 
+  size = wilm->mac_count * 6;
   macs = (uint8_t*)wilm + sizeof(wiloc_msg_t);
-  for (i = 0; i != (wilm->mac_count * 6); ++i) macs[i] = i;
+  for (i = 0; i != size; ++i) macs[i] = i;
+
+  if (ci.coords[0] != NULL)
+  {
+    uint8_t* const coords = macs + size;
+    size += 6;
+    wilm->flags |= WILOC_MSG_FLAG_COORDS;
+    encode_coord(coords + 0, ci.coords[0]);
+    encode_coord(coords + 3, ci.coords[1]);
+  }
+
   size = encode_wiloc_msg
-    ((uint8_t*)wilm, SMALL_SIZEOF(wiloc_msg_t) + wilm->mac_count * 6);
+    ((uint8_t*)wilm, SMALL_SIZEOF(wiloc_msg_t) + size);
 
   dnsq = (dns_query_t*)(buf + sizeof(dns_header_t) + size);
   dnsq->qtype = htons(DNS_RR_TYPE_A);

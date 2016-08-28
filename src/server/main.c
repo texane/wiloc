@@ -309,11 +309,9 @@ static pointdb_entry_t* pointdb_add
  pointdb_handle_t* db,
  size_t did,
  const uint8_t* macs, size_t nmac,
- const uint8_t* coords
+ const double* coords
 )
 {
-  /* TODO: coords is currently ignored */
-
   pointdb_entry_t* pe;
   const size_t mac_size = nmac * 6;
 
@@ -339,6 +337,13 @@ static pointdb_entry_t* pointdb_add
   pe->time = 0;
   pe->nmac = nmac;
   memcpy(pe->macs, macs, mac_size);
+
+  if (coords != NULL)
+  {
+    pe->flags |= POINTDB_FLAG_HAS_COORDS;
+    pe->coords[0] = coords[0];
+    pe->coords[1] = coords[1];
+  }
 
   return pe;
 }
@@ -448,6 +453,20 @@ static int decode_wiloc_msg(uint8_t* mbuf, size_t msize)
   return decode_base64(mbuf, i);
 }
 
+static void decode_coords(double* coords, const uint8_t* buf)
+{
+  size_t i;
+
+  for (i = 0; i != 2; ++i, buf += 3)
+  {
+    /* x the integer part, y the decimal part */
+    uint16_t x = ((uint16_t)buf[0] << 1) | ((uint16_t)buf[1] >> 7);
+    const uint16_t y = (((uint16_t)buf[1] & 0x7f) << 8) | ((uint16_t)buf[2]);
+    if (x & (1 << 8)) x |= 0xff00;
+    coords[i] = ((double)(int16_t)x) + (double)y / (double)(1 << 15);
+  }
+}
+
 static void dns_ev_handler(struct mg_connection* con, int ev, void* p)
 {
   switch (ev)
@@ -465,7 +484,8 @@ static void dns_ev_handler(struct mg_connection* con, int ev, void* p)
 	size_t msize;
 	size_t dsize;
 	const uint8_t* macs;
-	const uint8_t* coords;
+	double coords[2];
+	double* coordp;
 	pointdb_entry_t* pe;
 
 	msize = rr->name.len;
@@ -480,13 +500,13 @@ static void dns_ev_handler(struct mg_connection* con, int ev, void* p)
 	dsize = (size_t)wilm->mac_count * 6;
 	if (wilm->flags & WILOC_MSG_FLAG_COORDS)
 	{
-	  /* coords start after macs */
-	  coords = macs + dsize;
+	  decode_coords(coords, macs + dsize);
+	  coordp = coords;
 	  dsize += 6;
 	}
 	else
 	{
-	  coords = NULL;
+	  coordp = NULL;
 	}
 
 	if (dsize > (msize - sizeof(wiloc_msg_t))) break ;
@@ -496,7 +516,7 @@ static void dns_ev_handler(struct mg_connection* con, int ev, void* p)
 	 &g_pointdb,
 	 (size_t)wilm->did,
 	 macs, (size_t)wilm->mac_count,
-	 coords
+	 coordp
 	);
 
 	if (pe == NULL) break ;
