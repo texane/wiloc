@@ -14,8 +14,8 @@ user_main: user_main.o
 
 user_main.o: user_main.c
 
-flash: main-0x00000.bin
-	$(ESPTOOL) write_flash 0 main-0x00000.bin 0x40000 main-0x40000.bin
+flash: user_main-0x00000.bin
+	$(ESPTOOL) write_flash 0 user_main-0x00000.bin 0x40000 user_main-0x40000.bin
 
 clean:
-	rm -f main user_main.o user_main-0x00000.bin user_main-0x40000.bin
+	rm -f user_main user_main.o user_main-0x00000.bin user_main-0x40000.bin

@@ -15,7 +15,7 @@ static void ICACHE_FLASH_ATTR
 loop(os_event_t *events)
 {
     os_printf("Hello\n\r");
-    os_delay_us(10000);
+    os_delay_us(1000000);
     system_os_post(user_procTaskPrio, 0, 0 );
 }
 
@@ -23,6 +23,8 @@ loop(os_event_t *events)
 void ICACHE_FLASH_ATTR
 user_init()
 {
+    os_printf("Hello\n\r");
+#if 0
     char ssid[32] = SSID;
     char password[64] = SSID_PASSWORD;
     struct station_config stationConf;
@@ -39,4 +41,5 @@ user_init()
     system_os_task(loop, user_procTaskPrio,user_procTaskQueue, user_procTaskQueueLen);
 
     system_os_post(user_procTaskPrio, 0, 0 );
+#endif
 }
