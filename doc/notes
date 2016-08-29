@@ -1,9 +1,10 @@
-[ TODO ]
-modify wiloc_msg_t such that GPS and WIFI coordinates are not
-exclusive.
+[ esp8266 ]
+https://github.com/pfalcon/esp-open-sdk
+https://learn.adafruit.com/building-and-running-micropython-on-the-esp8266/flash-firmware
+https://github.com/esp8266/esp8266-wiki/wiki/Toolchain
+https://github.com/esp8266/source-code-examples
 
-
-[ on dns tunnelling ]
+[ DNS tunnelling ]
 in practice, active portals (FreeWifi) block DNS request if they
 do not target the DNS server IP passed during the DHCP response.
 So, it is not possible to escape without having first a DHCP
