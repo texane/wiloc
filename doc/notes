@@ -1,9 +1,10 @@
 [ esp8266 ]
 https://github.com/pfalcon/esp-open-sdk
-https://learn.adafruit.com/building-and-running-micropython-on-the-esp8266/flash-firmware
 https://github.com/esp8266/esp8266-wiki/wiki/Toolchain
 https://github.com/esp8266/source-code-examples
 https://cdn.sparkfun.com/datasheets/Wireless/WiFi/ESP8266ModuleV1.pdf
+http://hackaday.com/2015/03/18/how-to-directly-program-an-inexpensive-esp8266-wifi-module/
+https://espressif.com/en/support/explore/sample-codes
 
 [ DNS tunnelling ]
 in practice, active portals (FreeWifi) block DNS request if they
