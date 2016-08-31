@@ -3,6 +3,7 @@
 #include <lwip/api.h>
 #include <lwip/pbuf.h>
 #include <lwip/udp.h>
+#include <lwip/dns.h>
 #include <lwip/err.h>
 
 #include <stdint.h>
@@ -228,6 +229,7 @@ typedef enum
 static wiloc_state_t wiloc_state = WILOC_STATE_INIT;
 static ip_addr_t wiloc_laddr;
 static ip_addr_t wiloc_gwaddr;
+static ip_addr_t wiloc_dnsaddr;
 
 
 static int send_udp
@@ -253,11 +255,19 @@ static int send_udp
 
   os_memcpy(buf->payload, data, size);
 
+  pbuf_ref(buf);
+
   if (udp_sendto(pcb, buf, daddr, dport) != ERR_OK)
   {
     PERROR();
     goto on_error_2;
   }
+
+  return 0;
+
+  os_delay_us(1000000);
+
+  PRINTF("SENT!!!");
 
   err = 0;
 
@@ -315,6 +325,7 @@ static void wiloc_next(void* p)
       open_bi = NULL;
       STAILQ_FOREACH(bi, ((scaninfo*)p)->pbss, next)
       {
+	if (os_memcmp(bi->ssid, "Free", 4) == 0)
 	if ((bi->authmode == AUTH_OPEN) && (open_bi == NULL)) open_bi = bi;
 
 #ifdef CONFIG_DEBUG
@@ -388,14 +399,15 @@ static void wiloc_next(void* p)
 	    goto on_error;
 	  }
 
+	  wiloc_laddr = ipi.ip;
+	  wiloc_gwaddr = ipi.gw;
+	  wiloc_dnsaddr = dns_getserver(0);
+
 	  PRINTF
 	  (
-	   "[x] ip = " IPSTR ", gw = " IPSTR,
-	   IP2STR(&ipi.ip), IP2STR(&ipi.gw)
+	   "[x] ip = " IPSTR ", gw = " IPSTR ", dns = " IPSTR,
+	   IP2STR(&ipi.ip), IP2STR(&ipi.gw), IP2STR(&wiloc_dnsaddr)
 	  );
-
-	  os_memcpy(wiloc_laddr, &ipi.ip, sizeof(ipi.ip));
-	  os_memcpy(wiloc_gwaddr, &ipi.gw, sizeof(ipi.gw));
 
 	  wiloc_state = WILOC_STATE_SEND;
 
@@ -434,8 +446,6 @@ static void wiloc_next(void* p)
       small_size_t size;
       small_size_t i;
 
-      PRINTF("------ sending");
-
       dnsh = (dns_header_t*)buf;
       dnsh->id = uint16_to_be(0xdead);
       dnsh->flags = uint16_to_be(DNS_HDR_FLAG_RD);
@@ -463,7 +473,7 @@ static void wiloc_next(void* p)
 
       size += sizeof(dns_header_t) + sizeof(dns_query_t);
 
-      if (send_udp(buf, size, &wiloc_gwaddr, 53))
+      if (send_udp(buf, size, &wiloc_dnsaddr, 53))
       {
 	PERROR();
       }
