@@ -6,10 +6,26 @@
 /* #include "user_config.h" */
 #include "user_interface.h"
 
+
+/* debugging */
+
+#if 1
+#define PERROR() os_printf("[!] %s, %u\n\r", __FILE__, __LINE__)
+#define PRINTF(__s, ...) os_printf(__s, ##__VA_ARGS__)
+#else
+#define PERROR()
+#define PRINTF(__s, ...)
+#endif
+
+
+/* task queue */
+
 #define user_procTaskPrio 0
 #define user_procTaskQueueLen 1
-os_event_t user_procTaskQueue[user_procTaskQueueLen];
+static os_event_t user_procTaskQueue[user_procTaskQueueLen];
+
 static void loop(os_event_t *events);
+
 
 //Main code function
 static void ICACHE_FLASH_ATTR
@@ -17,7 +33,7 @@ loop(os_event_t *events)
 {
   static uint32_t n = 0;
 
-  os_printf("%s %u\n", __FUNCTION__, (++n));
+  PRINTF("%s %u\n", __FUNCTION__, (++n));
 
   os_delay_us(100000);
   system_os_post(user_procTaskPrio, 0, 0);
@@ -28,6 +44,8 @@ void ICACHE_FLASH_ATTR
 user_init()
 {
   uart_div_modify(0, UART_CLK_FREQ / 115200);
+
+  wifi_set_opmode(NULL_MODE);
 
 #if 0
   ets_wdt_disable();
@@ -55,6 +73,6 @@ user_init()
   //Start os task
 #endif
 
-  system_os_task(loop, user_procTaskPrio,user_procTaskQueue, user_procTaskQueueLen);
+  system_os_task(loop, user_procTaskPrio, user_procTaskQueue, user_procTaskQueueLen);
   system_os_post(user_procTaskPrio, 0, 0);
 }
