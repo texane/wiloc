@@ -263,12 +263,6 @@ static int send_udp
     goto on_error_2;
   }
 
-  return 0;
-
-  os_delay_us(1000000);
-
-  PRINTF("SENT!!!");
-
   err = 0;
 
  on_error_2:
@@ -483,8 +477,8 @@ static void wiloc_next(void* p)
 
   case WILOC_STATE_DISCONNECT:
     {
-      wifi_station_disconnect();
-      wifi_station_dhcpc_stop();
+      /* wifi_station_disconnect(); */
+      /* wifi_station_dhcpc_stop(); */
       wiloc_state = WILOC_STATE_DONE;
       break ;
     }
