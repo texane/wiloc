@@ -255,8 +255,6 @@ static int send_udp
 
   os_memcpy(buf->payload, data, size);
 
-  pbuf_ref(buf);
-
   if (udp_sendto(pcb, buf, daddr, dport) != ERR_OK)
   {
     PERROR();
