@@ -47,7 +47,8 @@ typedef uint8_t small_size_t;
 #define SMALL_SIZEOF(__x) ((small_size_t)sizeof(__x))
 
 
-static void encode_coord(uint8_t* buf, const char* coord)
+static void ICACHE_FLASH_ATTR encode_coord
+(uint8_t* buf, const char* coord)
 {
   static const small_size_t precision = WILOC_COORD_PRECISION;
   uint32_t x;
@@ -90,7 +91,7 @@ static void encode_coord(uint8_t* buf, const char* coord)
 }
 
 
-static small_size_t encode_base64
+static small_size_t ICACHE_FLASH_ATTR encode_base64
 (
  const uint8_t* sbuf, small_size_t slen,
  uint8_t* dbuf, small_size_t dlen
@@ -138,7 +139,7 @@ static small_size_t encode_base64
   return i;
 }
 
-static small_size_t encode_wiloc_msg
+static small_size_t ICACHE_FLASH_ATTR encode_wiloc_msg
 (uint8_t* mbuf, small_size_t msize)
 {
   /* encode a wiloc request */
@@ -209,31 +210,36 @@ typedef struct
 
 static os_udp_t wiloc_udp = OS_UDP_INITIALIZER;
 
-static int os_udp_init(os_udp_t* udp)
+static int ICACHE_FLASH_ATTR os_udp_init
+(os_udp_t* udp)
 {
   udp->pcb = udp_new();
   if (udp->pcb == NULL) return -1;
   return 0;
 }
 
-static void os_udp_fini(os_udp_t* udp)
+static void ICACHE_FLASH_ATTR os_udp_fini
+(os_udp_t* udp)
 {
   if (udp->pcb != NULL) udp_remove(udp->pcb);
   udp->pcb = NULL;
 }
 
-static void os_udp_set_buf_size(os_udp_t* udp, size_t size)
+static void ICACHE_FLASH_ATTR os_udp_set_buf_size
+(os_udp_t* udp, size_t size)
 {
   /* assume size <= sizeof(udp->data) */
   udp->size = size;
 }
 
-static void* os_udp_get_buf_data(os_udp_t* udp)
+static void* ICACHE_FLASH_ATTR os_udp_get_buf_data
+(os_udp_t* udp)
 {
   return udp->data;
 }
 
-static int os_udp_sendto(os_udp_t* udp, ip_addr_t* daddr, uint16_t dport)
+static int ICACHE_FLASH_ATTR os_udp_sendto
+(os_udp_t* udp, ip_addr_t* daddr, uint16_t dport)
 {
   struct pbuf* buf;
   int err = -1;
@@ -244,10 +250,6 @@ static int os_udp_sendto(os_udp_t* udp, ip_addr_t* daddr, uint16_t dport)
   memcpy(buf->payload, udp->data, udp->size);
 
   if (udp_sendto(udp->pcb, buf, daddr, dport) != ERR_OK) goto on_error_1;
-
-  /* FIXME: wait for packet transmission */
-  /* FIXME: is it really usefull */
-  os_delay_us(50000);
 
   err = 0;
 
@@ -260,9 +262,10 @@ static int os_udp_sendto(os_udp_t* udp, ip_addr_t* daddr, uint16_t dport)
 
 /* scan done task */
 
-static void wiloc_next(void*);
+static void ICACHE_FLASH_ATTR wiloc_next(void*);
 
-static void on_scan_done(void* p, STATUS status)
+static void ICACHE_FLASH_ATTR on_scan_done
+(void* p, STATUS status)
 {
   if (status != OK) p = NULL;
   if (((scaninfo*)p)->pbss == NULL) p = NULL;
@@ -291,10 +294,12 @@ typedef enum
 
 static wiloc_state_t wiloc_state = WILOC_STATE_INIT;
 static ip_addr_t wiloc_dnsaddr;
-static unsigned long wiloc_delay;
+#define DELAY_100MS 100000
+static unsigned long wiloc_delay = 0;
 
 
-static inline uint16_t uint16_to_be(uint16_t x)
+static inline uint16_t ICACHE_FLASH_ATTR uint16_to_be
+(uint16_t x)
 {
 #if (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
   x = (x >> 8) | (x << 8);
@@ -303,7 +308,8 @@ static inline uint16_t uint16_to_be(uint16_t x)
 }
 
 
-static void wiloc_next(void* p)
+static void ICACHE_FLASH_ATTR wiloc_next
+(void* p)
 {
   switch (wiloc_state)
   {
@@ -534,13 +540,16 @@ static void wiloc_next(void* p)
     {
       /* send the wiloc message */
 
-      PRINTF("SEND_TO");
       if (os_udp_sendto(&wiloc_udp, &wiloc_dnsaddr, 53))
       {
 	PERROR();
 	wiloc_state = WILOC_STATE_SKIP;
 	return ;
       }
+
+      /* FIXME: wait for packet transmission */
+      /* FIXME: is it really usefull */
+      wiloc_delay = 1 * DELAY_100MS;
 
       wiloc_state = WILOC_STATE_SKIP;
 
@@ -553,7 +562,7 @@ static void wiloc_next(void* p)
       wifi_station_dhcpc_stop();
 
       /* set delay to 10s before rescanning */
-      wiloc_delay = 10000000;
+      wiloc_delay = 100 * DELAY_100MS;
 
       wiloc_state = WILOC_STATE_START;
 
@@ -580,16 +589,28 @@ static void wiloc_next(void* p)
 
 /* user task */
 
-static void ICACHE_FLASH_ATTR on_event(os_event_t* events)
+static void ICACHE_FLASH_ATTR on_event
+(os_event_t* events)
 {
-  wiloc_delay = 100000;
-  if (wiloc_state != WILOC_STATE_SCAN) wiloc_next(NULL);
-  os_delay_us(wiloc_delay);
+  static unsigned long d = 0;
+
+  if (d == wiloc_delay)
+  {
+    d = 0;
+    wiloc_delay = DELAY_100MS;
+    if (wiloc_state != WILOC_STATE_SCAN) wiloc_next(NULL);
+  }
+  else
+  {
+    os_delay_us(DELAY_100MS);
+    d += DELAY_100MS;
+  }
+
   system_os_post(USER_TASK_PRIO_0, 0, 0);
 }
 
 
-void ICACHE_FLASH_ATTR user_init()
+void ICACHE_FLASH_ATTR user_init(void)
 {
 #define TASK_COUNT 1
   static os_event_t task_queue[TASK_COUNT];
