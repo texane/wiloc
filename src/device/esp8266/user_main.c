@@ -201,61 +201,60 @@ static small_size_t encode_wiloc_msg
 typedef struct
 {
   struct udp_pcb* pcb;
-  struct pbuf* buf;
+  uint8_t data[SMALL_SIZE_MAX];
+  size_t size;
 } os_udp_t;
 
-#define OS_UDP_INITIALIZER { NULL, NULL }
+#define OS_UDP_INITIALIZER { NULL }
 
 static os_udp_t wiloc_udp = OS_UDP_INITIALIZER;
 
-static int os_udp_init(os_udp_t* udp, size_t max_buf_size)
+static int os_udp_init(os_udp_t* udp)
 {
   udp->pcb = udp_new();
-  if (udp->pcb == NULL) goto on_error_0;
-
-  udp->buf = pbuf_alloc(PBUF_TRANSPORT, (u16_t)max_buf_size, PBUF_RAM);
-  if (udp->buf == NULL) goto on_error_1;
-
+  if (udp->pcb == NULL) return -1;
   return 0;
-
- on_error_1:
-  udp_remove(udp->pcb);
- on_error_0:
-  udp->pcb = NULL;
-  udp->buf = NULL;
-  return -1;
 }
 
 static void os_udp_fini(os_udp_t* udp)
 {
-  if (udp->buf != NULL) pbuf_free(udp->buf);
   if (udp->pcb != NULL) udp_remove(udp->pcb);
   udp->pcb = NULL;
-  udp->buf = NULL;
 }
 
 static void os_udp_set_buf_size(os_udp_t* udp, size_t size)
 {
-  udp->buf->len = (u16_t)size;
+  /* assume size <= sizeof(udp->data) */
+  udp->size = size;
 }
 
 static void* os_udp_get_buf_data(os_udp_t* udp)
 {
-  return udp->buf->payload;
+  return udp->data;
 }
 
 static int os_udp_sendto(os_udp_t* udp, ip_addr_t* daddr, uint16_t dport)
 {
-  if (udp_sendto(udp->pcb, udp->buf, daddr, dport) != ERR_OK)
-  {
-    return -1;
-  }
+  struct pbuf* buf;
+  int err = -1;
+
+  /* copy needed as pbuf cannot be reused */
+  buf = pbuf_alloc(PBUF_TRANSPORT, (u16_t)udp->size, PBUF_RAM);
+  if (buf == NULL) goto on_error_0;
+  memcpy(buf->payload, udp->data, udp->size);
+
+  if (udp_sendto(udp->pcb, buf, daddr, dport) != ERR_OK) goto on_error_1;
 
   /* FIXME: wait for packet transmission */
   /* FIXME: is it really usefull */
   os_delay_us(50000);
 
-  return 0;
+  err = 0;
+
+ on_error_1:
+  pbuf_free(buf);
+ on_error_0:
+  return err;
 }
 
 
@@ -313,7 +312,7 @@ static void wiloc_next(void* p)
       /* init resource once */
       /* release in WILOC_STATE_FINI */
 
-      if (os_udp_init(&wiloc_udp, SMALL_SIZE_MAX))
+      if (os_udp_init(&wiloc_udp))
       {
 	/* fatal error */
 	PERROR();
@@ -427,6 +426,7 @@ static void wiloc_next(void* p)
       }
 
       /* complete wiloc message */
+
       size = wilm->mac_count * 6;
       size = encode_wiloc_msg
 	((uint8_t*)wilm, SMALL_SIZEOF(wiloc_msg_t) + size);
@@ -534,6 +534,7 @@ static void wiloc_next(void* p)
     {
       /* send the wiloc message */
 
+      PRINTF("SEND_TO");
       if (os_udp_sendto(&wiloc_udp, &wiloc_dnsaddr, 53))
       {
 	PERROR();
