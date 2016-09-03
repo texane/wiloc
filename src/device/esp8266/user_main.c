@@ -196,6 +196,69 @@ static small_size_t encode_wiloc_msg
 }
 
 
+/* TODO: to be implemented by os_udp.{c,h} */
+
+typedef struct
+{
+  struct udp_pcb* pcb;
+  struct pbuf* buf;
+} os_udp_t;
+
+#define OS_UDP_INITIALIZER { NULL, NULL }
+
+static os_udp_t wiloc_udp = OS_UDP_INITIALIZER;
+
+static int os_udp_init(os_udp_t* udp, size_t max_buf_size)
+{
+  udp->pcb = udp_new();
+  if (udp->pcb == NULL) goto on_error_0;
+
+  udp->buf = pbuf_alloc(PBUF_TRANSPORT, (u16_t)max_buf_size, PBUF_RAM);
+  if (udp->buf == NULL) goto on_error_1;
+
+  return 0;
+
+ on_error_1:
+  udp_remove(udp->pcb);
+ on_error_0:
+  udp->pcb = NULL;
+  udp->buf = NULL;
+  return -1;
+}
+
+static void os_udp_fini(os_udp_t* udp)
+{
+  if (udp->buf != NULL) pbuf_free(udp->buf);
+  if (udp->pcb != NULL) udp_remove(udp->pcb);
+  udp->pcb = NULL;
+  udp->buf = NULL;
+}
+
+static void os_udp_set_buf_size(os_udp_t* udp, size_t size)
+{
+  udp->buf->len = (u16_t)size;
+}
+
+static void* os_udp_get_buf_data(os_udp_t* udp)
+{
+  return udp->buf->payload;
+}
+
+static int os_udp_sendto(os_udp_t* udp, ip_addr_t* daddr, uint16_t dport)
+{
+  if (udp_sendto(udp->pcb, udp->buf, daddr, dport) != ERR_OK)
+  {
+    return -1;
+  }
+
+  /* FIXME: wait for packet transmission */
+  /* FIXME: is it really usefull */
+  os_delay_us(50000);
+
+  return 0;
+}
+
+
 /* scan done task */
 
 static void wiloc_next(void*);
@@ -229,42 +292,7 @@ typedef enum
 
 static wiloc_state_t wiloc_state = WILOC_STATE_INIT;
 static ip_addr_t wiloc_dnsaddr;
-static struct udp_pcb* wiloc_pcb = NULL;
 static unsigned long wiloc_delay;
-
-
-static int send_udp
-(const uint8_t* data, size_t size, ip_addr_t* daddr, uint16_t dport)
-{
-  struct pbuf* buf;
-  int err = -1;
-
-  buf = pbuf_alloc(PBUF_TRANSPORT, (u16_t)size, PBUF_RAM);
-  if (buf == NULL)
-  {
-    PERROR();
-    goto on_error_0;
-  }
-
-  os_memcpy(buf->payload, data, size);
-
-  if (udp_sendto(wiloc_pcb, buf, daddr, dport) != ERR_OK)
-  {
-    PERROR();
-    goto on_error_1;
-  }
-
-  /* FIXME: wait for packet transmission */
-  /* FIXME: is it really usefull */
-  os_delay_us(50000);
-
-  err = 0;
-
- on_error_1:
-  pbuf_free(buf);
- on_error_0:
-  return err;
-}
 
 
 static inline uint16_t uint16_to_be(uint16_t x)
@@ -285,16 +313,17 @@ static void wiloc_next(void* p)
       /* init resource once */
       /* release in WILOC_STATE_FINI */
 
-      wiloc_pcb = udp_new();
-      if (wiloc_pcb == NULL)
+      if (os_udp_init(&wiloc_udp, SMALL_SIZE_MAX))
       {
 	/* fatal error */
 	PERROR();
 	wiloc_state = WILOC_STATE_FINI;
-	break ;
+	return ;
       }
 
       wifi_set_opmode_current(STATION_MODE);
+      wifi_station_set_auto_connect(0);
+
       wiloc_state = WILOC_STATE_START;
 
       break ;
@@ -323,20 +352,60 @@ static void wiloc_next(void* p)
       struct bss_info* bi;
       const struct bss_info* open_bi;
       struct station_config sc;
+      uint8_t* buf;
+      dns_header_t* dnsh;
+      dns_query_t* dnsq;
+      wiloc_msg_t* wilm;
+      small_size_t size;
+      uint8_t* macs;
 
       /* scan failed, next scan */
       if (bi == NULL)
       {
 	PERROR();
 	wiloc_state = WILOC_STATE_SKIP;
-	break ;
+	return ;
       }
+
+      /* fill dns query */
+
+      buf = os_udp_get_buf_data(&wiloc_udp);
+      dnsh = (dns_header_t*)buf;
+      dnsh->id = uint16_to_be(0xdead);
+      dnsh->flags = uint16_to_be(DNS_HDR_FLAG_RD);
+      dnsh->qdcount = uint16_to_be(1);
+      dnsh->ancount = uint16_to_be(0);
+      dnsh->nscount = uint16_to_be(0);
+      dnsh->arcount = uint16_to_be(0);
+
+      /* prepare wiloc message */
+
+      wilm = (wiloc_msg_t*)(buf + sizeof(dns_header_t));
+      wilm->vers = WILOC_MSG_VERS;
+      wilm->flags = WILOC_MSG_FLAG_TICK;
+      wilm->did = 0x2a;
+      wilm->mac_count = 0;
+      macs = (uint8_t*)wilm + sizeof(wiloc_msg_t);
+
+      /* detect open access point */
+      /* prepare wiloc message */
 
       open_bi = NULL;
       STAILQ_FOREACH(bi, ((scaninfo*)p)->pbss, next)
       {
-	if (os_memcmp(bi->ssid, "Free", 4) == 0)
-	if ((bi->authmode == AUTH_OPEN) && (open_bi == NULL)) open_bi = bi;
+	/* TODO: remove hardcoded filter */
+	if (memcmp(bi->ssid, "Free", 4) == 0)
+	{
+	  if ((bi->authmode == AUTH_OPEN) && (open_bi == NULL))
+	    open_bi = bi;
+	}
+
+	if (wilm->mac_count != 16)
+	{
+	  memcpy(macs, bi->bssid, 6);
+	  macs += 6;
+	  ++wilm->mac_count;
+	}
 
 #ifdef CONFIG_DEBUG
 	if (bi->ssid_len > 31) bi->ssid_len = 31;
@@ -354,22 +423,35 @@ static void wiloc_next(void* p)
       {
 	PERROR();
 	wiloc_state = WILOC_STATE_SKIP;
-	break ;
+	return ;
       }
 
-      wifi_station_disconnect();
-      wifi_station_set_auto_connect(0);
+      /* complete wiloc message */
+      size = wilm->mac_count * 6;
+      size = encode_wiloc_msg
+	((uint8_t*)wilm, SMALL_SIZEOF(wiloc_msg_t) + size);
 
-      os_memcpy(sc.ssid, open_bi->ssid, open_bi->ssid_len);
+      /* complete dns query */
+
+      dnsq = (dns_query_t*)(buf + sizeof(dns_header_t) + size);
+      dnsq->qtype = uint16_to_be(DNS_RR_TYPE_A);
+      dnsq->qclass = uint16_to_be(DNS_RR_CLASS_IN);
+
+      size += sizeof(dns_header_t) + sizeof(dns_query_t);
+      os_udp_set_buf_size(&wiloc_udp, size);
+
+      /* connect to open access point */
+
+      memcpy(sc.ssid, open_bi->ssid, open_bi->ssid_len);
       if (open_bi->ssid_len <= 31) sc.ssid[open_bi->ssid_len] = 0;
       sc.bssid_set = 1;
-      os_memcpy(sc.bssid, open_bi->bssid, sizeof(sc.bssid));
+      memcpy(sc.bssid, open_bi->bssid, sizeof(sc.bssid));
 
       if (wifi_station_set_config_current(&sc) == false)
       {
 	PERROR();
 	wiloc_state = WILOC_STATE_SKIP;
-	break ;
+	return ;
       }
 
       if (wifi_station_dhcpc_status() == DHCP_STARTED)
@@ -381,14 +463,14 @@ static void wiloc_next(void* p)
       {
 	PERROR();
 	wiloc_state = WILOC_STATE_SKIP;
-	break ;
+	return ;
       }
 
       if (wifi_station_connect() == false)
       {
 	PERROR();
 	wiloc_state = WILOC_STATE_SKIP;
-	break ;
+	return ;
       }
 
       wiloc_state = WILOC_STATE_CONNECT;
@@ -411,7 +493,7 @@ static void wiloc_next(void* p)
 	  {
 	    PERROR();
 	    wiloc_state = WILOC_STATE_SKIP;
-	    break ;
+	    return ;
 	  }
 
 	  wiloc_dnsaddr = dns_getserver(0);
@@ -441,7 +523,7 @@ static void wiloc_next(void* p)
 	{
 	  PERROR();
 	  wiloc_state = WILOC_STATE_SKIP;
-	  break ;
+	  return ;
 	}
       }
 
@@ -452,46 +534,11 @@ static void wiloc_next(void* p)
     {
       /* send the wiloc message */
 
-      uint8_t buf[SMALL_SIZE_MAX];
-      dns_header_t* dnsh;
-      dns_query_t* dnsq;
-      wiloc_msg_t* wilm;
-      uint8_t* macs;
-      small_size_t size;
-      small_size_t i;
-
-      dnsh = (dns_header_t*)buf;
-      dnsh->id = uint16_to_be(0xdead);
-      dnsh->flags = uint16_to_be(DNS_HDR_FLAG_RD);
-      dnsh->qdcount = uint16_to_be(1);
-      dnsh->ancount = uint16_to_be(0);
-      dnsh->nscount = uint16_to_be(0);
-      dnsh->arcount = uint16_to_be(0);
-
-      wilm = (wiloc_msg_t*)(buf + sizeof(dns_header_t));
-      wilm->vers = WILOC_MSG_VERS;
-      wilm->flags = WILOC_MSG_FLAG_TICK;
-      wilm->did = 0x2a;
-      wilm->mac_count = 16;
-
-      size = wilm->mac_count * 6;
-      macs = (uint8_t*)wilm + sizeof(wiloc_msg_t);
-      for (i = 0; i != size; ++i) macs[i] = i;
-
-      size = encode_wiloc_msg
-	((uint8_t*)wilm, SMALL_SIZEOF(wiloc_msg_t) + size);
-
-      dnsq = (dns_query_t*)(buf + sizeof(dns_header_t) + size);
-      dnsq->qtype = uint16_to_be(DNS_RR_TYPE_A);
-      dnsq->qclass = uint16_to_be(DNS_RR_CLASS_IN);
-
-      size += sizeof(dns_header_t) + sizeof(dns_query_t);
-
-      if (send_udp(buf, size, &wiloc_dnsaddr, 53))
+      if (os_udp_sendto(&wiloc_udp, &wiloc_dnsaddr, 53))
       {
 	PERROR();
 	wiloc_state = WILOC_STATE_SKIP;
-	break ;
+	return ;
       }
 
       wiloc_state = WILOC_STATE_SKIP;
@@ -501,8 +548,8 @@ static void wiloc_next(void* p)
 
   case WILOC_STATE_SKIP:
     {
-      /* wifi_station_disconnect(); */
-      /* wifi_station_dhcpc_stop(); */
+      wifi_station_disconnect();
+      wifi_station_dhcpc_stop();
 
       /* set delay to 10s before rescanning */
       wiloc_delay = 10000000;
@@ -514,7 +561,7 @@ static void wiloc_next(void* p)
 
   case WILOC_STATE_FINI:
     {
-      if (wiloc_pcb != NULL) udp_remove(wiloc_pcb);
+      os_udp_fini(&wiloc_udp);
       wiloc_state = WILOC_STATE_DONE;
       break ;
     }
@@ -527,7 +574,6 @@ static void wiloc_next(void* p)
       break ;
     }
   }
-
 }
 
 
