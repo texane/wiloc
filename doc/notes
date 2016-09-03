@@ -2,6 +2,7 @@
 . device: save the N>1 open access points. if connection fails on
 one, try another
 . device: merge Linux support
+. device: put in deep sleep during wait
 
 [ esp8266 ]
 https://github.com/pfalcon/esp-open-sdk
