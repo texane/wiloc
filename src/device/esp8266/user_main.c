@@ -6,7 +6,6 @@
 #include <lwip/dns.h>
 #include <lwip/err.h>
 
-#include <stdint.h>
 #include <ets_sys.h>
 #include <osapi.h>
 #include <queue.h>
