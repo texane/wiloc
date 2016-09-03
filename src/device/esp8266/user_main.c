@@ -217,56 +217,51 @@ static void on_scan_done(void* p, STATUS status)
 typedef enum
 {
   WILOC_STATE_INIT = 0,
-  WILOC_STATE_IDLE,
+  WILOC_STATE_START,
   WILOC_STATE_SCAN,
   WILOC_STATE_CONNECT,
   WILOC_STATE_SEND,
-  WILOC_STATE_DISCONNECT,
+  WILOC_STATE_SKIP,
+  WILOC_STATE_FINI,
   WILOC_STATE_DONE,
   WILOC_STATE_INVALID
 } wiloc_state_t;
 
 static wiloc_state_t wiloc_state = WILOC_STATE_INIT;
-static ip_addr_t wiloc_laddr;
-static ip_addr_t wiloc_gwaddr;
 static ip_addr_t wiloc_dnsaddr;
+static struct udp_pcb* wiloc_pcb = NULL;
+static unsigned long wiloc_delay;
 
 
 static int send_udp
 (const uint8_t* data, size_t size, ip_addr_t* daddr, uint16_t dport)
 {
-  struct udp_pcb* pcb;
   struct pbuf* buf;
   int err = -1;
-
-  pcb = udp_new();
-  if (pcb == NULL)
-  {
-    PERROR();
-    goto on_error_0;
-  }
 
   buf = pbuf_alloc(PBUF_TRANSPORT, (u16_t)size, PBUF_RAM);
   if (buf == NULL)
   {
     PERROR();
-    goto on_error_1;
+    goto on_error_0;
   }
 
   os_memcpy(buf->payload, data, size);
 
-  if (udp_sendto(pcb, buf, daddr, dport) != ERR_OK)
+  if (udp_sendto(wiloc_pcb, buf, daddr, dport) != ERR_OK)
   {
     PERROR();
-    goto on_error_2;
+    goto on_error_1;
   }
+
+  /* FIXME: wait for packet transmission */
+  /* FIXME: is it really usefull */
+  os_delay_us(50000);
 
   err = 0;
 
- on_error_2:
-  pbuf_free(buf);
  on_error_1:
-  udp_remove(pcb);
+  pbuf_free(buf);
  on_error_0:
   return err;
 }
@@ -287,32 +282,55 @@ static void wiloc_next(void* p)
   {
   case WILOC_STATE_INIT:
     {
+      /* init resource once */
+      /* release in WILOC_STATE_FINI */
+
+      wiloc_pcb = udp_new();
+      if (wiloc_pcb == NULL)
+      {
+	/* fatal error */
+	PERROR();
+	wiloc_state = WILOC_STATE_FINI;
+	break ;
+      }
+
       wifi_set_opmode_current(STATION_MODE);
-      wiloc_state = WILOC_STATE_IDLE;
+      wiloc_state = WILOC_STATE_START;
+
+      break ;
     }
 
-  case WILOC_STATE_IDLE:
+  case WILOC_STATE_START:
     {
+      /* start a scan */
+
       struct scan_config scan_config;
+
       scan_config.ssid = NULL;
       scan_config.bssid = NULL;
       scan_config.channel = 0;
       scan_config.show_hidden = 1;
       wiloc_state = WILOC_STATE_SCAN;
       wifi_station_scan(&scan_config, on_scan_done);
+
       break ;
     }
 
   case WILOC_STATE_SCAN:
     {
-      /* TODO: prepare wiloc message here */
+      /* scan completed */
 
       struct bss_info* bi;
       const struct bss_info* open_bi;
       struct station_config sc;
 
-      /* scan failed */
-      if (bi == NULL) goto on_error;
+      /* scan failed, next scan */
+      if (bi == NULL)
+      {
+	PERROR();
+	wiloc_state = WILOC_STATE_SKIP;
+	break ;
+      }
 
       open_bi = NULL;
       STAILQ_FOREACH(bi, ((scaninfo*)p)->pbss, next)
@@ -334,7 +352,8 @@ static void wiloc_next(void* p)
 
       if (open_bi == NULL)
       {
-	wiloc_state = WILOC_STATE_IDLE;
+	PERROR();
+	wiloc_state = WILOC_STATE_SKIP;
 	break ;
       }
 
@@ -349,7 +368,8 @@ static void wiloc_next(void* p)
       if (wifi_station_set_config_current(&sc) == false)
       {
 	PERROR();
-	goto on_error;
+	wiloc_state = WILOC_STATE_SKIP;
+	break ;
       }
 
       if (wifi_station_dhcpc_status() == DHCP_STARTED)
@@ -360,13 +380,15 @@ static void wiloc_next(void* p)
       if (wifi_station_dhcpc_start() == false)
       {
 	PERROR();
-	goto on_error;
+	wiloc_state = WILOC_STATE_SKIP;
+	break ;
       }
 
       if (wifi_station_connect() == false)
       {
 	PERROR();
-	goto on_error;
+	wiloc_state = WILOC_STATE_SKIP;
+	break ;
       }
 
       wiloc_state = WILOC_STATE_CONNECT;
@@ -388,11 +410,10 @@ static void wiloc_next(void* p)
 	  if (wifi_get_ip_info(STATION_IF, &ipi) == false)
 	  {
 	    PERROR();
-	    goto on_error;
+	    wiloc_state = WILOC_STATE_SKIP;
+	    break ;
 	  }
 
-	  wiloc_laddr = ipi.ip;
-	  wiloc_gwaddr = ipi.gw;
 	  wiloc_dnsaddr = dns_getserver(0);
 
 	  PRINTF
@@ -418,7 +439,8 @@ static void wiloc_next(void* p)
       case STATION_CONNECT_FAIL:
       default:
 	{
-	  goto on_error;
+	  PERROR();
+	  wiloc_state = WILOC_STATE_SKIP;
 	  break ;
 	}
       }
@@ -468,30 +490,40 @@ static void wiloc_next(void* p)
       if (send_udp(buf, size, &wiloc_dnsaddr, 53))
       {
 	PERROR();
+	wiloc_state = WILOC_STATE_SKIP;
+	break ;
       }
 
-      wiloc_state = WILOC_STATE_DISCONNECT;
+      wiloc_state = WILOC_STATE_SKIP;
+
+      break ;
     }
 
-  case WILOC_STATE_DISCONNECT:
+  case WILOC_STATE_SKIP:
     {
       /* wifi_station_disconnect(); */
       /* wifi_station_dhcpc_stop(); */
+
+      /* set delay to 10s before rescanning */
+      wiloc_delay = 10000000;
+
+      wiloc_state = WILOC_STATE_START;
+
+      break ;
+    }
+
+  case WILOC_STATE_FINI:
+    {
+      if (wiloc_pcb != NULL) udp_remove(wiloc_pcb);
       wiloc_state = WILOC_STATE_DONE;
       break ;
     }
 
   case WILOC_STATE_DONE:
-    {
-      /* same state */
-      break ;
-    }
-
-  case WILOC_STATE_INVALID:
   default:
     {
-    on_error:
-      wiloc_state = WILOC_STATE_IDLE;
+      /* same state */
+      wiloc_state = WILOC_STATE_DONE;
       break ;
     }
   }
@@ -503,8 +535,9 @@ static void wiloc_next(void* p)
 
 static void ICACHE_FLASH_ATTR on_event(os_event_t* events)
 {
+  wiloc_delay = 100000;
   if (wiloc_state != WILOC_STATE_SCAN) wiloc_next(NULL);
-  os_delay_us(100000);
+  os_delay_us(wiloc_delay);
   system_os_post(USER_TASK_PRIO_0, 0, 0);
 }
 
