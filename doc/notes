@@ -3,6 +3,7 @@
 one, try another
 . device: merge Linux support
 . device: put in deep sleep during wait
+. server: implement dump operation
 
 [ esp8266 ]
 https://github.com/pfalcon/esp-open-sdk
