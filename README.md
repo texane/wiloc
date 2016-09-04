@@ -3,19 +3,22 @@
 
 ## Description
 
-wiloc (short for WIfi LOCator) is primarly a WiFi based tracking
+WiLoc (short for WIfi LOCator) is primarly a WiFi based tracking
 device that reports to a web server.
 
 In the simplest configuration, a wiloc device relies only on
-WiFi to implement both tracking and server communication. That
+WiFi to implement both tracking and Internet communication. That
 is, no GPS and GSM modules are needed. It does so by using:
 - DNS tunnelling to communicate information to the web server
 through open access points,
 - geolocation services to resolve MAC addresses into coordinates.
 
-So, it is mainly useful in urban environments for which MAC
-to coordinates maps exist, and where open access points are
-available (ie. most cities ...).
+The following diagram describes how it works:
+![HowItWorks](doc/dia/main.png)
+
+So, it is mainly useful in urban environments where WiFi access
+points are available, and for which a decent MAC to coordinate
+mapping exists (ie. most cities ...).
 
 Also, the protocol supports for a GPS auxiliary device when
 available. This can be used for contributing logs to help WiFi
