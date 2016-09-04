@@ -5,6 +5,17 @@ ESPTOOL := $(ESP_SDK_DIR)/bin/esptool.py
 
 CFLAGS = -I. -mlongcalls
 CFLAGS += -DOS_ESP8266
+
+ifeq ($(CONFIG_DNS_ZONE),)
+$(error missing CONFIG_DNS_ZONE variable)
+else
+CFLAGS += -DCONFIG_DNS_ZONE=\"$(CONFIG_DNS_ZONE)\"
+endif
+
+ifneq ($(CONFIG_DEBUG),)
+CFLAGS += -DCONFIG_DEBUG=$(CONFIG_DEBUG)
+endif
+
 LDLIBS = -nostdlib -Wl,--start-group -lmain -lnet80211 -lwpa -llwip -lpp -lphy -Wl,--end-group -lgcc
 LDFLAGS = -Teagle.app.v6.ld
 

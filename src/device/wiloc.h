@@ -15,7 +15,7 @@ typedef uint8_t small_size_t;
 
 #ifdef OS_LINUX
 
-#ifdef CONFIG_DEBUG
+#if defined(CONFIG_DEBUG) && (CONFIG_DEBUG == 1)
 #include <stdio.h>
 #define os_printf printf
 #endif /* CONFIG_DEBUG */
@@ -63,7 +63,7 @@ typedef struct
 
 /* debugging macros */
 
-#ifdef CONFIG_DEBUG
+#if defined(CONFIG_DEBUG) && (CONFIG_DEBUG == 1)
 #define PERROR() os_printf("[E] %s, %u\n\r", __FILE__, __LINE__)
 #define TRACE() os_printf("[T] %s, %u\n\r", __FILE__, __LINE__)
 #define PRINTF(__s, ...) os_printf(__s "\n\r", ##__VA_ARGS__)

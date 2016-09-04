@@ -1,4 +1,3 @@
-#include "config.h"
 #include "wiloc.h"
 #include "../common/dns.h"
 #include "../common/wiloc.h"
@@ -7,9 +6,9 @@
 /* wiloc message encoder */
 /* implemented with 8 bits memory limited MCUs in mind */
 
-#ifndef DNS_ZONE_NAME
-#error "missing DNS_ZONE_NAME (.my.zone.com)"
-#endif /* DNS_ZONE_NAME */
+#ifndef CONFIG_DNS_ZONE
+#error "missing CONFIG_DNS_ZONE=.my.zone.com"
+#endif /* CONFIG_DNS_ZONE */
 
 static void ICACHE_FLASH_ATTR encode_coord
 (uint8_t* buf, const char* coord)
@@ -135,7 +134,7 @@ static small_size_t ICACHE_FLASH_ATTR encode_wiloc_msg
 
   /* append zone */
 
-  for (i = 0; DNS_ZONE_NAME[i]; ++i, ++k) mbuf[k] = DNS_ZONE_NAME[i];
+  for (i = 0; CONFIG_DNS_ZONE[i]; ++i, ++k) mbuf[k] = CONFIG_DNS_ZONE[i];
   mbuf[k++] = 0;
 
   /* encode DNS name in place */
@@ -313,7 +312,7 @@ void ICACHE_FLASH_ATTR wiloc_next(void* p)
 	  ++wilm->mac_count;
 	}
 
-#ifdef CONFIG_DEBUG
+#if defined(CONFIG_DEBUG) && (CONFIG_DEBUG == 1)
 	if (bi->ssid_len > 31) bi->ssid_len = 31;
 	bi->ssid[bi->ssid_len] = 0;
 
