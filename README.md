@@ -47,7 +47,7 @@ using the following command line options:
 - -geoloc_key: Google geolocation API key
 
 ### Compile and upload the device firmware
-First, you have to install the esp-open-sdk from here
+First, you have to install the esp-open-sdk from
 https://github.com/pfalcon/esp-open-sdk.
 
 Then, compile and upload the firmware in the ESP8266 flash memory:
