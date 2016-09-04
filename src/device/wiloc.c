@@ -169,14 +169,15 @@ static void ICACHE_FLASH_ATTR on_scan_done
   if (status != OK) p = NULL;
   if (((scaninfo*)p)->pbss == NULL) p = NULL;
 
+  /* force next state scheduling */
   wiloc_next(p);
 
-  /* reschedule wiloc_next */
-  system_os_post(USER_TASK_PRIO_0, 0, 0);
+  /* rearm timer if still disabled */
+  if (os_timer_is_disabled()) os_timer_rearm(OS_TIMER_100MS);
 }
 
 
-/* wiloc fsm */
+/* utils */
 
 static inline uint16_t ICACHE_FLASH_ATTR uint16_to_be(uint16_t x)
 {
@@ -186,6 +187,25 @@ static inline uint16_t ICACHE_FLASH_ATTR uint16_to_be(uint16_t x)
   return x;
 }
 
+
+/* wiloc state machine */
+
+typedef enum
+{
+  WILOC_STATE_INIT = 0,
+  WILOC_STATE_START,
+  WILOC_STATE_SCAN,
+  WILOC_STATE_CONNECT,
+  WILOC_STATE_SEND,
+  WILOC_STATE_SKIP,
+  WILOC_STATE_FINI,
+  WILOC_STATE_DONE,
+  WILOC_STATE_INVALID
+} wiloc_state_t;
+
+static wiloc_state_t wiloc_state = WILOC_STATE_INIT;
+static ip_addr_t wiloc_dnsaddr;
+static os_udp_t wiloc_udp;
 
 void ICACHE_FLASH_ATTR wiloc_next(void* p)
 {
@@ -217,6 +237,9 @@ void ICACHE_FLASH_ATTR wiloc_next(void* p)
       /* start a scan */
 
       struct scan_config scan_config;
+
+      /* let on_scan_done rearm timer */
+      os_timer_disable();
 
       scan_config.ssid = NULL;
       scan_config.bssid = NULL;
@@ -427,7 +450,7 @@ void ICACHE_FLASH_ATTR wiloc_next(void* p)
 
       /* FIXME: wait for packet transmission */
       /* FIXME: is it really usefull */
-      wiloc_delay = 1 * DELAY_100MS;
+      os_timer_rearm(OS_TIMER_100MS);
 
       wiloc_state = WILOC_STATE_SKIP;
 
@@ -440,7 +463,7 @@ void ICACHE_FLASH_ATTR wiloc_next(void* p)
       wifi_station_dhcpc_stop();
 
       /* set delay to 10s before rescanning */
-      wiloc_delay = 100 * DELAY_100MS;
+      os_timer_rearm(100 * OS_TIMER_100MS);
 
       wiloc_state = WILOC_STATE_START;
 

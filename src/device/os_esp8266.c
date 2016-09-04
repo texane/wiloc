@@ -50,23 +50,52 @@ int ICACHE_FLASH_ATTR os_udp_sendto
 }
 
 
-/* main */
+/* software timer */
+
+#define OS_TIMER_MAX ((unsigned long)-1)
+
+static unsigned long os_timer_top = 0;
+static unsigned long os_timer_cur = 0;
+
+unsigned int ICACHE_FLASH_ATTR os_timer_is_disabled()
+{
+  return os_timer_top == OS_TIMER_MAX;
+}
+
+void ICACHE_FLASH_ATTR os_timer_disable(void)
+{
+  os_timer_top = OS_TIMER_MAX;
+  os_timer_cur = 0;
+}
+
+void ICACHE_FLASH_ATTR os_timer_rearm(unsigned long t)
+{
+  const unsigned int was_disabled = os_timer_is_disabled();
+
+  os_timer_top = t;
+
+  if (was_disabled)
+  {
+    /* timer was disabled, force reschedule of on_event */
+    system_os_post(USER_TASK_PRIO_0, 0, 0);
+  }
+}
+
 
 static void ICACHE_FLASH_ATTR on_event
 (os_event_t* events)
 {
-  static unsigned long d = 0;
-
-  if (d == wiloc_delay)
+  if (os_timer_cur == os_timer_top)
   {
-    d = 0;
-    wiloc_delay = DELAY_100MS;
-    if (wiloc_state != WILOC_STATE_SCAN) wiloc_next(NULL);
+    os_timer_cur = 0;
+    os_timer_top = OS_TIMER_100MS;
+    wiloc_next(NULL);
   }
   else
   {
-    os_delay_us(DELAY_100MS);
-    d += DELAY_100MS;
+    os_delay_us(OS_TIMER_100MS);
+    if (os_timer_is_disabled()) os_timer_cur = 0;
+    else os_timer_cur += OS_TIMER_100MS;
   }
 
   system_os_post(USER_TASK_PRIO_0, 0, 0);

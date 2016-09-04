@@ -29,8 +29,6 @@ typedef struct
   size_t size;
 } os_udp_t;
 
-#define OS_UDP_INITIALIZER { -1 }
-
 #else
 #ifdef OS_ESP8266
 
@@ -54,9 +52,6 @@ typedef struct
   uint8_t data[SMALL_SIZE_MAX];
   size_t size;
 } os_udp_t;
-
-#define OS_UDP_INITIALIZER { NULL }
-
 
 #else /* OS_ESP8266 */
 #error "missing or invalid OS_xxx macro"
@@ -88,27 +83,15 @@ void* ICACHE_FLASH_ATTR os_udp_get_buf_data(os_udp_t*);
 int ICACHE_FLASH_ATTR os_udp_sendto(os_udp_t*, ip_addr_t*, uint16_t);
 
 
+/* os timer */
+
+#define OS_TIMER_100MS 100000
+unsigned int ICACHE_FLASH_ATTR os_timer_is_disabled();
+void ICACHE_FLASH_ATTR os_timer_disable(void);
+void ICACHE_FLASH_ATTR os_timer_rearm(unsigned long);
+
+
 /* wiloc state machine */
-
-typedef enum
-{
-  WILOC_STATE_INIT = 0,
-  WILOC_STATE_START,
-  WILOC_STATE_SCAN,
-  WILOC_STATE_CONNECT,
-  WILOC_STATE_SEND,
-  WILOC_STATE_SKIP,
-  WILOC_STATE_FINI,
-  WILOC_STATE_DONE,
-  WILOC_STATE_INVALID
-} wiloc_state_t;
-
-#define DELAY_100MS 100000
-
-static wiloc_state_t wiloc_state = WILOC_STATE_INIT;
-static ip_addr_t wiloc_dnsaddr;
-static unsigned long wiloc_delay = 0;
-static os_udp_t wiloc_udp = OS_UDP_INITIALIZER;
 
 void ICACHE_FLASH_ATTR wiloc_next(void*);
 
