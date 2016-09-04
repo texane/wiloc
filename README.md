@@ -49,6 +49,8 @@ command line options (may require root priviledges):
 - -http_lport: HTTP server local port (default: 80)
 - -geoloc_key: Google geolocation API key
 
+You can now connect on the server using a web browser.
+
 ### Compile and upload the device firmware
 First, you have to install the esp-open-sdk from
 https://github.com/pfalcon/esp-open-sdk.
