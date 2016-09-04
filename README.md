@@ -36,13 +36,13 @@ here:
 http://beta.ivc.no/wiki/index.php/DNS_Tunneling
 
 ### Compile and run the server
-First, compile the server binary:
+First, compile the server executable:
 ```
 cd $(WILOC_REPO)/src/server
 make
 ```
-It produces a binary. Run it (may require root priviledges)
-using the following command line options:
+It produces an executable (a.out). Run it using the following
+command line options (may require root priviledges):
 - -dns_laddr: DNS server local address (default: 0.0.0.0)
 - -dns_lport: DNS server local port (default: 53)
 - -http_laddr: HTTP server local address (default: 0.0.0.0)
