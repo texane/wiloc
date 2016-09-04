@@ -57,7 +57,7 @@ int ICACHE_FLASH_ATTR os_udp_sendto
 static unsigned long os_timer_top = 0;
 static unsigned long os_timer_cur = 0;
 
-unsigned int ICACHE_FLASH_ATTR os_timer_is_disabled()
+unsigned int ICACHE_FLASH_ATTR os_timer_is_disabled(void)
 {
   return os_timer_top == OS_TIMER_MAX;
 }

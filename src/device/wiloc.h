@@ -86,7 +86,7 @@ int ICACHE_FLASH_ATTR os_udp_sendto(os_udp_t*, ip_addr_t*, uint16_t);
 /* os timer */
 
 #define OS_TIMER_100MS 100000
-unsigned int ICACHE_FLASH_ATTR os_timer_is_disabled();
+unsigned int ICACHE_FLASH_ATTR os_timer_is_disabled(void);
 void ICACHE_FLASH_ATTR os_timer_disable(void);
 void ICACHE_FLASH_ATTR os_timer_rearm(unsigned long);
 
