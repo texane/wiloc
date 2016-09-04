@@ -27,19 +27,18 @@ based gelocation services to maintain their databases.
 
 ## Installation
 
-TODO: device compilation, flashing
-TODO: server compilation
+### Server
 TODO: DNS zone configuration
-
-
-## Usage
-
+TODO: server compilation
 server command line:
 - -dns_laddr: DNS server local address (default: 0.0.0.0)
 - -dns_lport: DNS server local port (default: 53)
 - -http_laddr: HTTP server local address (default: 0.0.0.0)
 - -http_lport: HTTP server local port (default: 80)
 - -geoloc_key: Google geolocation API key
+
+### Device
+TODO: device compilation, flashing
 
 
 ## Implementation notes
