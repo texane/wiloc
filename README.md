@@ -1,4 +1,4 @@
-# WiFi based tracking device and server
+# WiFi based geotracking
 
 
 ## Description
