@@ -28,13 +28,21 @@ based gelocation services to maintain their databases.
 
 ## Installation
 
+### DNS zone configuration
+
+First, you have to configure your DNS zone so that A queries
+are redirected to your server.
+
 ### Server
 
-TODO: DNS zone configuration
+First, compile the server binary:
+```
+cd $(WILOC_REPO)/src/server
+make
+```
 
-TODO: server compilation
-
-Server command line:
+Run the server (may require root priviledges) using the
+following command line options:
 - -dns_laddr: DNS server local address (default: 0.0.0.0)
 - -dns_lport: DNS server local port (default: 53)
 - -http_laddr: HTTP server local address (default: 0.0.0.0)
@@ -42,4 +50,12 @@ Server command line:
 - -geoloc_key: Google geolocation API key
 
 ### Device
-TODO: device compilation, flashing
+
+First, you have to install the esp-open-sdk from here:
+[https://github.com/pfalcon/esp-open-sdk]
+
+Then, compile and upload the firmware in the ESP8266 flash memory:
+```
+cd $(WILOC_REPO)/src/device
+ESP_SDK_DIR=<sdk_path> CONFIG_DNS_ZONE=".my.zone.com" make -f esp8266.mk flash
+```
