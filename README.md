@@ -25,6 +25,13 @@ available. This can be used for contributing logs to help WiFi
 based gelocation services to maintain their databases.
 
 
+## Installation
+
+TODO: device compilation, flashing
+TODO: server compilation
+TODO: DNS zone configuration
+
+
 ## Usage
 
 server command line:
@@ -35,7 +42,7 @@ server command line:
 - -geoloc_key: Google geolocation API key
 
 
-## Source code
+## Implementation notes
 
 - src/server: server specific code
 - src/device: device specific code
