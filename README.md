@@ -28,9 +28,12 @@ based gelocation services to maintain their databases.
 ## Installation
 
 ### Server
+
 TODO: DNS zone configuration
+
 TODO: server compilation
-server command line:
+
+Server command line:
 - -dns_laddr: DNS server local address (default: 0.0.0.0)
 - -dns_lport: DNS server local port (default: 53)
 - -http_laddr: HTTP server local address (default: 0.0.0.0)
