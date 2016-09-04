@@ -42,10 +42,3 @@ Server command line:
 
 ### Device
 TODO: device compilation, flashing
-
-
-## Implementation notes
-
-- src/server: server specific code
-- src/device: device specific code
-- src/common/wiloc.h: protocol
