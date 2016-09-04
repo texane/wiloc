@@ -28,9 +28,12 @@ based gelocation services to maintain their databases.
 
 ## Installation
 
-### Configure a DNS zone
-First, you have to configure your DNS zone so that A queries
-are redirected to your server.
+### Delegate a DNS zone
+First, you have to configure your DNS server so that queries to
+a particular subdomain (let say my.zone.com) are redirected to
+the wiloc server. You can find more information on DNS tunneling
+here:
+http://beta.ivc.no/wiki/index.php/DNS_Tunneling
 
 ### Compile and run the server
 First, compile the server binary:
