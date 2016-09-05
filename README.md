@@ -52,13 +52,16 @@ Compile the server executable:
 cd $(WILOC_REPO)/src/server
 make
 ```
-It produces an executable (a.out). Run it using the following
-command line options (may require root priviledges):
-- -dns_laddr: DNS server local address (default: 0.0.0.0)
-- -dns_lport: DNS server local port (default: 53)
-- -http_laddr: HTTP server local address (default: 0.0.0.0)
-- -http_lport: HTTP server local port (default: 80)
-- -geoloc_key: Google geolocation API key
+Run the server it using the following command line options (may
+require root priviledges):
+```
+sudo ./a.out
+ -dns_laddr: DNS server local address (default: 0.0.0.0)
+ -dns_lport: DNS server local port (default: 53)
+ -http_laddr: HTTP server local address (default: 0.0.0.0)
+ -http_lport: HTTP server local port (default: 80)
+ -geoloc_key: Google geolocation API key
+```
 
 You can now connect on the server using a web browser.
 
