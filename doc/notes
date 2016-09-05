@@ -5,7 +5,7 @@ one, try another
 . device: put in deep sleep during wait
 . server: implement dump operation
 
-[ esp8266 ]
+[ esp8266 development ]
 https://github.com/pfalcon/esp-open-sdk
 https://github.com/esp8266/esp8266-wiki/wiki/Toolchain
 https://github.com/esp8266/source-code-examples
@@ -13,6 +13,11 @@ http://esp8266.ru/download/esp8266-doc/ESP8266_IoT_SDK_Programming%20Guide_v0.9.
 https://cdn.sparkfun.com/datasheets/Wireless/WiFi/ESP8266ModuleV1.pdf
 http://hackaday.com/2015/03/18/how-to-directly-program-an-inexpensive-esp8266-wifi-module/
 https://espressif.com/en/support/explore/sample-codes
+
+[ esp8266 power consumption ]
+https://www.sparkfun.com/news/1842
+https://tzapu.com/minimalist-battery-powered-esp8266-wifi-temperature-logger/
+http://www.esp8266.com/wiki/doku.php?id=esp8266_power_usage
 
 [ DNS tunnelling ]
 in practice, active portals (FreeWifi) block DNS request if they
