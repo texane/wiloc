@@ -28,15 +28,25 @@ based gelocation services to maintain their databases.
 
 ## Installation
 
-### Delegate a DNS zone
+### Prerequisites
+
+#### Delegate a DNS zone
 First, you have to configure your DNS server so that queries to
 a particular subdomain (let say my.zone.com) are redirected to
 the wiloc server. You can find more information on DNS tunneling
 here:
 http://beta.ivc.no/wiki/index.php/DNS_Tunneling
 
+#### Install esp-open-sdk
+Install the esp-open-sdk from
+https://github.com/pfalcon/esp-open-sdk
+
+#### Get a key to use Google geolocation service
+All details available here:
+https://developers.google.com/maps/documentation/geolocation/intro
+
 ### Compile and run the server
-First, compile the server executable:
+Compile the server executable:
 ```
 cd $(WILOC_REPO)/src/server
 make
@@ -52,10 +62,7 @@ command line options (may require root priviledges):
 You can now connect on the server using a web browser.
 
 ### Compile and upload the device firmware
-First, you have to install the esp-open-sdk from
-https://github.com/pfalcon/esp-open-sdk.
-
-Then, compile and upload the firmware in the ESP8266 flash memory:
+Compile and upload the firmware in the ESP8266 flash memory:
 ```
 cd $(WILOC_REPO)/src/device
 ESP_SDK_DIR=<sdk_path> CONFIG_DNS_ZONE=".my.zone.com" make -f esp8266.mk flash
