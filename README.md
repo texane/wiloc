@@ -6,7 +6,7 @@
 WiLoc (short for WIfi LOCator) is primarly a cheap WiFi based
 tracking device that reports to a web server.
 
-In the simplest configuration, a wiloc device relies only on
+In the simplest configuration, a WiLoc device relies only on
 WiFi to implement both tracking and Internet communication. That
 is, no additional modules are needed (GPS, GSM ...). It does so
 by using:
@@ -21,9 +21,10 @@ So, it is mainly useful in urban environments where WiFi access
 points are available, and for which a decent MAC to coordinate
 mapping exists (ie. most cities ...).
 
-Also, the protocol supports for a GPS auxiliary device when
-available. This can be used for contributing logs to help WiFi
-based gelocation services to maintain their databases.
+Also, the WiLoc protocol supports sending GPS coordinates when
+an auxiliary GPS module is available. This can be used for
+contributing logs to help WiFi based gelocation services to
+maintain their databases.
 
 
 ## Installation
@@ -33,7 +34,7 @@ based gelocation services to maintain their databases.
 #### Delegate a DNS zone
 First, you have to configure your DNS server so that queries to
 a particular subdomain (let say my.zone.com) are redirected to
-the wiloc server. You can find more information on DNS tunneling
+the WiLoc server. You can find more information on DNS tunneling
 here:
 http://beta.ivc.no/wiki/index.php/DNS_Tunneling
 
